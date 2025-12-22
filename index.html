@@ -1,1 +1,49 @@
+<!doctype html>
+<html lang="hu">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Termékek</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="loader">
+    <div class="loaderCard">
+      <h3 class="loaderTitle">Betöltés</h3>
+      <p id="loaderText" class="loaderText">Készül a felület…</p>
+      <div class="loaderBar"><div></div></div>
+    </div>
+  </div>
 
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="logo"></div>
+        <div>
+          <h1>Készlet / Terméklista</h1>
+          <p>Egyszerű, letisztult</p>
+        </div>
+      </div>
+
+      <div id="nav" class="nav"></div>
+    </aside>
+
+    <main class="main">
+      <div class="topbar">
+        <div class="search">
+          <input id="searchInput" placeholder="Keresés név / leírás alapján…" />
+        </div>
+        <a class="smallLink" href="admin.html">Admin</a>
+      </div>
+
+      <div id="grid" class="grid"></div>
+
+      <div class="footerNote">
+        Tipp: a “készlet” simán frissíthető adminból, aztán exportálod a JSON-t és feltöltöd GitHubra.
+      </div>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
