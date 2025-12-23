@@ -10,9 +10,6 @@
   --ok:#34d399;
   --shadow: 0 20px 60px rgba(0,0,0,.45);
   --radius: 18px;
-
-  /* NEW: 1000x1000 / square hero */
-  --hero-radius: 16px;
 }
 
 *{ box-sizing:border-box; }
@@ -50,15 +47,8 @@ button, input, select{ font: inherit; }
   padding: 22px;
   box-shadow: var(--shadow);
 }
-.loader-top{
-  display:flex; justify-content:space-between; align-items:center;
-  gap:12px;
-}
-.loader-logo{
-  font-weight:800;
-  letter-spacing:.3px;
-  font-size: 20px;
-}
+.loader-top{ display:flex; justify-content:space-between; align-items:center; gap:12px; }
+.loader-logo{ font-weight:800; letter-spacing:.3px; font-size: 20px; }
 .pulse{
   height:10px; width:10px; border-radius:999px;
   background: var(--brand2);
@@ -87,11 +77,7 @@ button, input, select{ font: inherit; }
   0%{ transform: translateX(-120%); }
   100%{ transform: translateX(320%); }
 }
-.loader-sub{
-  margin-top:12px;
-  color: var(--muted);
-  font-size: 13px;
-}
+.loader-sub{ margin-top:12px; color: var(--muted); font-size: 13px; }
 
 .wrap{
   display:grid;
@@ -120,9 +106,7 @@ button, input, select{ font: inherit; }
   background-clip:text;
   color:transparent;
 }
-.nav{
-  display:flex; flex-direction:column; gap:8px;
-}
+.nav{ display:flex; flex-direction:column; gap:8px; }
 .nav button{
   width:100%;
   padding: 12px 12px;
@@ -134,14 +118,12 @@ button, input, select{ font: inherit; }
   cursor:pointer;
   transition: .18s;
 }
-.nav button:hover{
-  transform: translateY(-1px);
-  border-color: rgba(124,92,255,.35);
-}
+.nav button:hover{ transform: translateY(-1px); border-color: rgba(124,92,255,.35); }
 .nav button.active{
   background: linear-gradient(180deg, rgba(124,92,255,.22), rgba(18,27,44,.65));
   border-color: rgba(124,92,255,.45);
 }
+
 .sidebar-bottom{
   margin-top:auto;
   padding-top: 14px;
@@ -176,23 +158,7 @@ button, input, select{ font: inherit; }
   gap: 14px;
   margin-bottom: 14px;
 }
-.h1{
-  font-size: 18px;
-  color: var(--muted);
-}
-
-/* NEW: search input in topbar */
-.search{
-  flex:1;
-  max-width: 420px;
-  border-radius: 14px;
-  border: 1px solid rgba(255,255,255,.08);
-  background: rgba(11,15,23,.35);
-  color: var(--text);
-  padding: 10px 12px;
-  outline:none;
-}
-
+.h1{ font-size: 18px; color: var(--muted); }
 .grid{
   display:grid;
   grid-template-columns: repeat( auto-fill, minmax(250px, 1fr) );
@@ -208,22 +174,30 @@ button, input, select{ font: inherit; }
   transition: .18s;
 }
 .card:hover{ transform: translateY(-2px); border-color: rgba(124,92,255,.35); }
+
+/* SOLD-OUT: kép legyen szürkébb */
 .card.dim{
-  opacity:.45;
-  filter: grayscale(.2);
+  border-color: rgba(255,255,255,.05);
 }
-
-/* NEW: dim image stronger when sold out */
 .card.dim .hero img{
-  filter: grayscale(.35) brightness(.82);
+  filter: grayscale(1) brightness(.62) contrast(.95);
 }
+.card.dim .overlay-title{
+  background: rgba(11,15,23,.62);
+  border-color: rgba(255,255,255,.08);
+}
+.card.dim .price{ opacity:.85; }
+.card.dim .stock{ opacity:.9; }
 
-/* ======== 1000x1000 FIX: make hero square ======== */
+/* === 1000x1000 FIX ===
+   - hero legyen négyzet (kép 1:1)
+   - overlay cím/íz clamp-el, nem csúszik szét
+*/
 .hero{
   position:relative;
-  aspect-ratio: 1 / 1;     /* <-- square */
-  height: auto;            /* override fixed height */
-  min-height: 170px;       /* mobile fallback */
+  width:100%;
+  aspect-ratio: 1 / 1;
+  height:auto;
   background: linear-gradient(135deg, rgba(124,92,255,.18), rgba(40,215,255,.10));
 }
 .hero img{
@@ -232,7 +206,7 @@ button, input, select{ font: inherit; }
   display:block;
 }
 
-/* badges */
+/* badge */
 .badges{
   position:absolute; top:10px; left:10px;
   display:flex; gap:8px; flex-wrap:wrap;
@@ -244,17 +218,18 @@ button, input, select{ font: inherit; }
   border-radius: 999px;
   background: rgba(0,0,0,.45);
   border: 1px solid rgba(255,255,255,.12);
+  backdrop-filter: blur(8px);
 }
 .badge.out{ background: rgba(255,77,109,.18); border-color: rgba(255,77,109,.35); }
 .badge.soon{ background: rgba(40,215,255,.14); border-color: rgba(40,215,255,.35); }
 
-/* overlay title */
+/* title overlay */
 .overlay-title{
   position:absolute;
   left:12px; right:12px;
-  bottom: 10px;
-  display:flex; flex-direction:column; gap:3px;
-  background: rgba(11,15,23,.55);
+  bottom: 12px;
+  display:flex; flex-direction:column; gap:4px;
+  background: linear-gradient(180deg, rgba(11,15,23,.15), rgba(11,15,23,.70));
   border: 1px solid rgba(255,255,255,.10);
   border-radius: 14px;
   padding: 10px 10px;
@@ -265,23 +240,20 @@ button, input, select{ font: inherit; }
   font-weight: 900;
   letter-spacing: .2px;
   font-size: 15px;
-  line-height: 1.1;
-
-  /* NEW: clamp so 1000x1000-on se fusson szét */
+  line-height: 1.15;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
-  overflow: hidden;
+  overflow:hidden;
 }
 .overlay-title .flavor{
   color: var(--muted);
   font-size: 13px;
-
-  /* NEW clamp */
+  line-height: 1.2;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
-  overflow: hidden;
+  overflow:hidden;
 }
 
 .card-body{
@@ -328,14 +300,13 @@ button, input, select{ font: inherit; }
 
 .small-muted{ color: var(--muted); font-size: 13px; }
 
+/* ADMIN */
 .admin-wrap{
   max-width: 1200px;
   margin:0 auto;
   padding: 18px;
 }
-.admin-top{
-  display:flex; align-items:center; justify-content:space-between; gap:12px;
-}
+.admin-top{ display:flex; align-items:center; justify-content:space-between; gap:12px; }
 .tabs{
   margin-top: 14px;
   display:flex; gap:10px; flex-wrap:wrap;
@@ -429,6 +400,7 @@ button, input, select{ font: inherit; }
 }
 .kpi .box .t{ color: var(--muted); font-size:12px; }
 .kpi .box .v{ font-weight: 900; font-size: 18px; margin-top:4px; }
+
 .table{
   width:100%;
   border-collapse: collapse;
@@ -441,6 +413,7 @@ button, input, select{ font: inherit; }
   font-size: 13px;
 }
 .table th{ color: var(--muted); font-weight: 700; }
+
 .save-ind{
   color: var(--muted);
   font-size: 13px;
@@ -452,6 +425,7 @@ button, input, select{ font: inherit; }
 }
 .dot.ok{ background: rgba(52,211,153,.9); }
 .dot.busy{ background: rgba(40,215,255,.9); }
+.dot.bad{ background: rgba(255,77,109,.9); }
 
 @media (max-width: 860px){
   .wrap{ grid-template-columns: 1fr; }
