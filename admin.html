@@ -4,116 +4,117 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>ShadowVapes Admin</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
-  <div class="layout">
-    <aside class="sidebar">
-      <div class="brand">
-        <div class="brand__logo">ShadowVapes</div>
-        <div class="brand__sub">Admin panel</div>
+  <div class="main fade-in">
+    <div class="admin-wrap">
+      <div class="topbar">
+        <div>
+          <div style="font-size:20px; font-weight:800">Admin</div>
+          <div class="smallmuted">Itt tudod szerkeszteni a termékeket + kategóriákat, és GitHub-ba menteni.</div>
+        </div>
+        <a class="btn ghost" href="./index.html">Vissza a főoldalra</a>
       </div>
 
-      <div class="nav">
-        <button class="nav__btn is-active" id="btnProducts">Termékek</button>
-        <button class="nav__btn" id="btnCategories">Kategóriák</button>
+      <div class="panel" id="lockPanel">
+        <div class="row">
+          <div>
+            <label>Admin jelszó (config.js)</label>
+            <input id="adminPass" type="password" placeholder="Admin jelszó">
+          </div>
+          <div>
+            <label>GitHub token (fine-grained, Contents: RW)</label>
+            <input id="ghToken" type="password" placeholder="ghp_...">
+          </div>
+        </div>
+        <div class="actions">
+          <button class="btn" id="unlockBtn">Belépés</button>
+          <button class="btn ghost" id="saveTokenBtn">Token mentése böngészőbe</button>
+        </div>
+        <div class="status" id="lockStatus"></div>
       </div>
 
-      <div class="sidebar__footer">
-        <div class="hint">
-          Mentés GitHubra: token kell (csak nálad, böngészőben tároljuk).
+      <div class="panel" id="adminPanel" style="display:none">
+        <div class="row">
+          <div>
+            <label>Új kategória</label>
+            <input id="newCat" placeholder="pl. pod, liquid, gamer egér...">
+          </div>
+          <div style="flex:0.6">
+            <label>&nbsp;</label>
+            <button class="btn" id="addCatBtn">Kategória hozzáadása</button>
+          </div>
         </div>
+
+        <hr>
+
+        <div class="row">
+          <div>
+            <label>Kategória szűrő (admin)</label>
+            <select id="adminCatFilter"></select>
+          </div>
+          <div style="flex:0.6">
+            <label>&nbsp;</label>
+            <button class="btn ghost" id="reloadBtn">Újratöltés GitHub-ról</button>
+          </div>
+        </div>
+
+        <hr>
+
+        <div style="font-weight:800; margin-bottom:8px">Új termék</div>
+        <div class="row">
+          <div>
+            <label>Név</label>
+            <input id="pName" placeholder="Termék neve">
+          </div>
+          <div>
+            <label>Kategória</label>
+            <select id="pCat"></select>
+          </div>
+        </div>
+        <div class="row">
+          <div>
+            <label>Kép (URL)</label>
+            <input id="pImg" placeholder="https://...">
+          </div>
+          <div>
+            <label>Mennyiség</label>
+            <input id="pQty" type="number" min="0" value="1">
+          </div>
+        </div>
+        <div class="row">
+          <div>
+            <label>Leírás</label>
+            <textarea id="pDesc" placeholder="Rövid leírás"></textarea>
+          </div>
+        </div>
+        <div class="actions">
+          <button class="btn" id="addProductBtn">Termék hozzáadása</button>
+          <button class="btn ghost" id="saveBtn">Mentés GitHub-ra (commit)</button>
+        </div>
+
+        <div class="status" id="status"></div>
+
+        <hr>
+
+        <div style="font-weight:800; margin-bottom:8px">Termékek</div>
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Név</th>
+              <th>Kategória</th>
+              <th>Készlet</th>
+              <th>Elfogyott</th>
+              <th>Művelet</th>
+            </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
       </div>
-    </aside>
-
-    <main class="main">
-      <header class="topbar">
-        <div class="topbar__title" id="adminTitle">Admin</div>
-      </header>
-
-      <section id="gate" class="card" style="max-width:720px;">
-        <div class="card__body">
-          <h3 class="card__name">Belépés</h3>
-          <p class="card__desc">Add meg a saját admin jelszavad és a GitHub tokened (csak nálad tárolódik).</p>
-
-          <div style="display:grid; gap:10px;">
-            <input id="adminPass" placeholder="Admin jelszó (amit te állítasz be)" style="padding:12px;border-radius:14px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.06);color:rgba(255,255,255,.9)">
-            <input id="ghOwner" placeholder="GitHub felhasználónév (owner)" style="padding:12px;border-radius:14px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.06);color:rgba(255,255,255,.9)">
-            <input id="ghRepo" placeholder="Repo neve (pl. shadowvapes)" style="padding:12px;border-radius:14px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.06);color:rgba(255,255,255,.9)">
-            <input id="ghToken" placeholder="GitHub token (classic) - repo scope" style="padding:12px;border-radius:14px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.06);color:rgba(255,255,255,.9)">
-            <button id="enterBtn" class="nav__btn" style="text-align:center;">Belépek</button>
-          </div>
-
-          <p class="card__desc" style="margin-top:10px;color:rgba(255,255,255,.55)">
-            Tipp: a jelszót te találod ki. Ez csak “UI gate” (nem banki védelem), de a mentéshez úgyis kell a token.
-          </p>
-          <div id="gateMsg" class="card__desc" style="margin:0;color:rgba(255,120,120,.85)"></div>
-        </div>
-      </section>
-
-      <section id="panel" hidden style="display:grid; gap:14px; max-width:980px;">
-        <div class="card">
-          <div class="card__body" style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:space-between;">
-            <div>
-              <div class="card__name" style="margin:0;">Mentés / Betöltés</div>
-              <div class="card__desc" style="margin:6px 0 0;">A változtatásokat a GitHub repó `data/*.json` fájljaiba írjuk.</div>
-            </div>
-            <div style="display:flex; gap:10px; flex-wrap:wrap;">
-              <button id="reloadBtn" class="nav__btn" style="text-align:center;">Újratöltés</button>
-              <button id="saveBtn" class="nav__btn" style="text-align:center;">Mentés GitHubra</button>
-            </div>
-          </div>
-        </div>
-
-        <div class="card" id="productsCard">
-          <div class="card__body">
-            <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:space-between;">
-              <div>
-                <div class="card__name" style="margin:0;">Termékek</div>
-                <div class="card__desc" style="margin:6px 0 0;">Kategória szerint szűrés, készlet, elfogyott.</div>
-              </div>
-
-              <div style="display:flex; gap:10px; flex-wrap:wrap;">
-                <select id="filterCat" style="padding:10px;border-radius:14px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.06);color:rgba(255,255,255,.9)">
-                  <option value="all">Összes kategória</option>
-                </select>
-                <button id="addProductBtn" class="nav__btn" style="text-align:center;">+ Termék</button>
-              </div>
-            </div>
-
-            <div id="productsList" style="display:grid; gap:10px; margin-top:14px;"></div>
-          </div>
-        </div>
-
-        <div class="card" id="categoriesCard" hidden>
-          <div class="card__body">
-            <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:space-between;">
-              <div>
-                <div class="card__name" style="margin:0;">Kategóriák</div>
-                <div class="card__desc" style="margin:6px 0 0;">Új kategória létrehozása.</div>
-              </div>
-            </div>
-
-            <div style="display:grid; gap:10px; margin-top:12px;">
-              <input id="newCatName" placeholder="Kategória neve (pl. Eldobható)" style="padding:12px;border-radius:14px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.06);color:rgba(255,255,255,.9)">
-              <button id="addCatBtn" class="nav__btn" style="text-align:center;">+ Kategória létrehozása</button>
-              <div id="catList" style="display:grid; gap:8px;"></div>
-            </div>
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="card__body">
-            <div class="card__desc" id="statusLine" style="margin:0;color:rgba(255,255,255,.65)"></div>
-          </div>
-        </div>
-      </section>
-    </main>
+    </div>
   </div>
 
-  <script src="./admin.js"></script>
+  <script type="module" src="./admin.js"></script>
 </body>
 </html>
