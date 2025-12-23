@@ -1,25 +1,5 @@
 {
-  "updatedAt": "2025-12-23T17:07:24.266Z",
-  "categories": [
-    {
-      "id": "elf",
-      "label_hu": "ELF",
-      "label_en": "ELF",
-      "defaultPrice": 5990
-    }
-  ],
-  "products": [
-    {
-      "id": "p1",
-      "categoryId": "elf",
-      "status": "ok",
-      "stock": 12,
-      "price": null,
-      "image": "https://....",
-      "name_hu": "ELF Bar",
-      "name_en": "ELF Bar",
-      "flavor_hu": "Blue Razz",
-      "flavor_en": "Blue Razz"
-    }
-  ]
+  "updatedAt": "2025-12-23T17:09:43.039Z",
+  "categories": [],
+  "products": []
 }
