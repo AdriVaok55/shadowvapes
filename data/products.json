@@ -1,34 +1,44 @@
 {
-  "shopName": "ShadowVapes",
   "categories": [
-    "Hamarosan",
-    "Elfbar",
-    "Vapsolo"
+    { "id": "elf", "label_hu": "ELF", "label_en": "ELF" },
+    { "id": "lostmary", "label_hu": "Lost Mary", "label_en": "Lost Mary" }
   ],
   "products": [
     {
-      "id": "9e1a214d6df2219b491fd485",
-      "category": "Elfbar",
-      "nameHu": "Elfbar Ice King 30k slukk",
-      "nameEn": "Elfbar Ice King 30k slukk",
-      "flavorHu": "Energiaital",
-      "flavorEn": "Elf Bull",
-      "image": "https://ezigisale.com/wp-content/uploads/2025/03/Elf_bull.png",
-      "price": 6000,
-      "stock": 0,
-      "status": "out"
+      "id": "p_elf_1",
+      "categoryId": "elf",
+      "status": "ok",
+      "stock": 12,
+      "price": 5990,
+      "image": "https://via.placeholder.com/1000",
+      "name_hu": "ELF Bar",
+      "name_en": "ELF Bar",
+      "flavor_hu": "Blue Razz",
+      "flavor_en": "Blue Razz"
     },
     {
-      "id": "cb7fa66a7786b819b492e455e",
-      "category": "Vapsolo",
-      "nameHu": "Vapsolo Quads 80k 4 ÃÂ­zÃÂ±",
-      "nameEn": "Vapsolo Quads 80k 4 ÃÂ­zÃÂ±",
-      "flavorHu": "Mojito & MangÃÂ³s Monster & Lady gyilkos & Pink LimonÃÂ¡dÃÂ©",
-      "flavorEn": "Mojito & Monster Mango & Lady Killer & Pink Lemonade",
-      "image": "https://ezigisale.com/wp-content/uploads/2025/10/10.MOJITO-MONSTER-MANGO-LADY-KILLER-PINK-LEMONADE.png",
-      "price": 6500,
-      "stock": 6,
-      "status": "ok"
+      "id": "p_elf_2",
+      "categoryId": "elf",
+      "status": "out",
+      "stock": 0,
+      "price": 5990,
+      "image": "https://via.placeholder.com/1000",
+      "name_hu": "ELF Bar",
+      "name_en": "ELF Bar",
+      "flavor_hu": "Watermelon",
+      "flavor_en": "Watermelon"
+    },
+    {
+      "id": "p_lm_1",
+      "categoryId": "lostmary",
+      "status": "soon",
+      "stock": 0,
+      "price": 6490,
+      "image": "https://via.placeholder.com/1000",
+      "name_hu": "Lost Mary",
+      "name_en": "Lost Mary",
+      "flavor_hu": "Strawberry Ice",
+      "flavor_en": "Strawberry Ice"
     }
   ]
 }
