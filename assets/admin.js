@@ -249,6 +249,10 @@
     // biztos rend
     normalizeDoc();
 
+    for(const p of (state.doc.products||[])){
+      if(p && p.status === "out") p.stock = 0;
+      if(p && (!p.name_en || String(p.name_en).trim()==="")) p.name_en = p.name_hu || "";
+    }
     const productsText = JSON.stringify(state.doc, null, 2);
     const salesText = JSON.stringify(state.sales, null, 2);
 
@@ -283,6 +287,13 @@
       state.shas.sales = sRes?.content?.sha || state.shas.sales;
 
       ok = true;
+
+      // ✅ azonnali update a katalógus tabnak (ha nyitva van ugyanabban a böngészőben)
+      try{
+        const payload = { doc: state.doc, sales: state.sales, ts: Date.now() };
+        localStorage.setItem("sv_live_payload", JSON.stringify(payload));
+        try{ new BroadcastChannel("sv_live").postMessage(payload); }catch{}
+      }catch{}
 
       // ✅ mentés után automatikus újratöltés
       const rr = await tryLoadFromGithub(cfg);
@@ -594,8 +605,7 @@
         <div class="field third"><label>Ár (Ft) — üres: kategória ár</label><input id="p_price" type="number" min="0" value="${p.price===null?"":p.price}"></div>
         <div class="field full"><label>Kép URL</label><input id="p_img" value="${escapeHtml(p.image)}"></div>
 
-        <div class="field third"><label>Név HU</label><input id="p_nhu" value="${escapeHtml(p.name_hu)}"></div>
-        <div class="field third"><label>Név EN</label><input id="p_nen" value="${escapeHtml(p.name_en)}"></div>
+        <div class="field third"><label>Termék neve</label><input id="p_name" value="${escapeHtml(p.name_hu)}"></div>
         <div class="field third"><label>Íz HU</label><input id="p_fhu" value="${escapeHtml(p.flavor_hu)}"></div>
         <div class="field third"><label>Íz EN</label><input id="p_fen" value="${escapeHtml(p.flavor_en)}"></div>
       </div>
@@ -614,8 +624,8 @@
           stock: Math.max(0, Number($("#p_stock").value||0)),
           price: ($("#p_price").value === "" ? null : Math.max(0, Number($("#p_price").value||0))),
           image: ($("#p_img").value||"").trim(),
-          name_hu: ($("#p_nhu").value||"").trim(),
-          name_en: ($("#p_nen").value||"").trim(),
+          name_hu: ($("#p_name").value||"").trim(),
+          name_en: ($("#p_name").value||"").trim(),
           flavor_hu: ($("#p_fhu").value||"").trim(),
           flavor_en: ($("#p_fen").value||"").trim()
         };
@@ -631,6 +641,23 @@
         queueAutoSave();
       }}
     ]);
+
+    // out -> stock automatikusan 0 + lock
+    const stSel = $("#p_status");
+    const stInp = $("#p_stock");
+    const syncStockLock = () => {
+      if(!stSel || !stInp) return;
+      if(stSel.value === "out"){
+        stInp.value = "0";
+        stInp.disabled = true;
+      }else{
+        stInp.disabled = false;
+      }
+    };
+    if(stSel){
+      stSel.addEventListener("change", syncStockLock);
+    }
+    syncStockLock();
   }
 
   function renderSales(){
@@ -870,47 +897,35 @@
   }
 
   function drawChart(){
-    if(!$("#revCanvas")) return;
+    const canvas = $("#revCanvas");
+    if(!canvas) return;
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0,0,canvas.width,canvas.height);
 
     const cat = state.filters.chartCat;
 
     // group by date
-    const map = new Map(); // date => {rev, salesCount, qty}
+    const map = new Map(); // date => {rev, cnt, qty}
     for(const s of state.sales){
       const st = saleTotals(s, cat);
       if(cat !== "all" && !st.hit) continue;
-
-      const d = s.date;
+      const d = String(s.date || "");
+      if(!d) continue;
       if(!map.has(d)) map.set(d, { rev:0, cnt:0, qty:0 });
       const obj = map.get(d);
-      obj.rev += st.revenue;
-      obj.qty += st.qty;
+      obj.rev += Number(st.revenue||0);
       obj.cnt += 1;
+      obj.qty += Number(st.qty||0);
     }
 
-    const days = [...map.entries()].sort((a,b)=> a[0].localeCompare(b[0]));
-    const labels = days.map(x=>x[0]);
-    const revs = days.map(x=>x[1].rev);
-    const cnts = days.map(x=>x[1].cnt);
-    const qtys = days.map(x=>x[1].qty);
+    const days = [...map.keys()].sort();
+    const revs = days.map(d => map.get(d).rev);
+    const cnts = days.map(d => map.get(d).cnt);
+    const labels = days.map(d => d.slice(5)); // MM-DD
 
-    const totalRev = revs.reduce((a,b)=>a+b,0);
-    const totalSales = cnts.reduce((a,b)=>a+b,0);
-    const totalQty = qtys.reduce((a,b)=>a+b,0);
-
-    $("#chartKpi").innerHTML = `
-      <div class="box"><div class="t">Össz bevétel</div><div class="v">${totalRev.toLocaleString("hu-HU")} Ft</div></div>
-      <div class="box"><div class="t">Eladások (db)</div><div class="v">${totalSales.toLocaleString("hu-HU")}</div></div>
-      <div class="box"><div class="t">Eladott mennyiség</div><div class="v">${totalQty.toLocaleString("hu-HU")}</div></div>
-    `;
-
-    const canvas = $("#revCanvas");
-    const ctx = canvas.getContext("2d");
-    ctx.clearRect(0,0,canvas.width,canvas.height);
-
-    // background grid
-    ctx.globalAlpha = 1;
+    // grid
     ctx.strokeStyle = "rgba(255,255,255,.08)";
+    ctx.lineWidth = 1;
     for(let i=0;i<6;i++){
       const y = 50 + i*50;
       ctx.beginPath(); ctx.moveTo(40,y); ctx.lineTo(canvas.width-20,y); ctx.stroke();
@@ -926,46 +941,80 @@
     const maxRev = Math.max(...revs, 1);
     const maxCnt = Math.max(...cnts, 1);
 
-    const left = 40, top = 20, bottom = canvas.height - 40, right = canvas.width - 20;
+    const left = 70, right = canvas.width - 70, top = 24, bottom = canvas.height - 48;
     const w = right - left;
     const h = bottom - top;
 
-    const barW = Math.max(10, Math.floor(w / days.length) - 8);
+    // axes + ticks
+    const ticks = 5;
+    ctx.font = "12px ui-sans-serif, system-ui";
+    for(let i=0;i<=ticks;i++){
+      const t = i / ticks;
+      const y = top + t*h;
 
-    // bars (revenue)
-    for(let i=0;i<days.length;i++){
-      const x = left + i*(barW+8) + 6;
-      const bh = Math.round((revs[i] / maxRev) * (h-40));
-      const y = bottom - bh;
+      // horizontal grid
+      ctx.strokeStyle = "rgba(255,255,255,.10)";
+      ctx.beginPath(); ctx.moveTo(left,y); ctx.lineTo(right,y); ctx.stroke();
 
-      // gradient-ish (simple)
-      ctx.fillStyle = "rgba(124,92,255,.55)";
-      ctx.fillRect(x, y, barW, bh);
-      ctx.fillStyle = "rgba(40,215,255,.25)";
-      ctx.fillRect(x, y, barW, Math.max(6, Math.floor(bh*0.35)));
+      // left (revenue)
+      const vRev = Math.round(maxRev * (1 - t));
+      ctx.fillStyle = "rgba(255,255,255,.55)";
+      ctx.textAlign = "right";
+      ctx.textBaseline = "middle";
+      ctx.fillText(`${vRev.toLocaleString("hu-HU")} Ft`, left - 8, y);
+
+      // right (sales count)
+      const vCnt = Math.round(maxCnt * (1 - t));
+      ctx.fillStyle = "rgba(255,255,255,.35)";
+      ctx.textAlign = "left";
+      ctx.fillText(`${vCnt.toLocaleString("hu-HU")} db`, right + 8, y);
     }
 
-    // line (sales count)
-    ctx.strokeStyle = "rgba(40,215,255,.85)";
-    ctx.lineWidth = 2;
+    // x labels (sparse)
+    const step = Math.ceil(days.length / 8);
+    ctx.fillStyle = "rgba(255,255,255,.65)";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    for(let i=0;i<days.length;i+=step){
+      const x = left + (days.length===1 ? 0 : (i/(days.length-1))*w);
+      ctx.fillText(labels[i], x, bottom + 10);
+    }
+
+    const xAt = (i) => left + (days.length===1 ? w/2 : (i/(days.length-1))*w);
+    const yRevAt = (v) => bottom - (v/maxRev)*h;
+    const yCntAt = (v) => bottom - (v/maxCnt)*h;
+
+    // revenue line (crypto-style)
+    ctx.strokeStyle = "rgba(124,92,255,.90)";
+    ctx.lineWidth = 2.6;
     ctx.beginPath();
     for(let i=0;i<days.length;i++){
-      const x = left + i*(barW+8) + 6 + barW/2;
-      const ly = bottom - Math.round((cnts[i] / maxCnt) * (h-40));
-      if(i===0) ctx.moveTo(x, ly);
-      else ctx.lineTo(x, ly);
+      const x = xAt(i);
+      const y = yRevAt(revs[i]);
+      if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
     }
     ctx.stroke();
 
-    // labels (sparse)
-    ctx.fillStyle = "rgba(255,255,255,.65)";
-    ctx.font = "12px ui-sans-serif, system-ui";
-    const step = Math.ceil(days.length / 7);
-    for(let i=0;i<days.length;i+=step){
-      const x = left + i*(barW+8) + 6;
-      ctx.fillText(labels[i], x, canvas.height - 14);
+    // sales line (2nd axis)
+    ctx.strokeStyle = "rgba(40,215,255,.85)";
+    ctx.lineWidth = 2.2;
+    ctx.beginPath();
+    for(let i=0;i<days.length;i++){
+      const x = xAt(i);
+      const y = yCntAt(cnts[i]);
+      if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
     }
+    ctx.stroke();
+
+    // legend
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
+    ctx.fillStyle = "rgba(255,255,255,.70)";
+    ctx.fillText("Bevétel (Ft)", left, 6);
+    ctx.fillStyle = "rgba(255,255,255,.45)";
+    ctx.fillText("Eladások (db)", left + 130, 6);
   }
+
 
   function renderAll(){
     renderSettings();

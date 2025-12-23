@@ -8,33 +8,11 @@
     search: ""
   };
 
-  const TXT = {
-    hu: { all:"Összes termék", soon:"Hamarosan", stock:"Készlet", pcs:"db", out:"Elfogyott" },
-    en: { all:"All products", soon:"Coming soon", stock:"Stock", pcs:"pcs", out:"Sold out" }
-  };
-  const t = (k) => (TXT[state.lang] && TXT[state.lang][k]) || k;
+  const UI = { all:"Összes termék", soon:"Hamarosan", stock:"Készlet", pcs:"db", out:"Elfogyott" };
+  const t = (k) => UI[k] || k;
 
   const norm = (s) => (s || "").toString().toLowerCase()
     .normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-
-  const _defaultBranchCache = new Map();
-
-  async function getDefaultBranch(or){
-    const key = `${or.owner}/${or.repo}`;
-    if(_defaultBranchCache.has(key)) return _defaultBranchCache.get(key);
-    try{
-      const url = `https://api.github.com/repos/${encodeURIComponent(or.owner)}/${encodeURIComponent(or.repo)}`;
-      const r = await fetch(url, { cache:"no-store" });
-      if(r.ok){
-        const data = await r.json();
-        const b = data && data.default_branch ? String(data.default_branch) : null;
-        _defaultBranchCache.set(key, b);
-        return b;
-      }
-    }catch{}
-    _defaultBranchCache.set(key, null);
-    return null;
-  }
 
   function getOwnerRepoFromUrl(){
     // https://username.github.io/repo/...
@@ -47,15 +25,21 @@
     return { owner, repo };
   }
 
+function getOwnerRepoCfg(){
+    const owner = (localStorage.getItem("sv_owner")||"").trim();
+    const repo = (localStorage.getItem("sv_repo")||"").trim();
+    const branch = (localStorage.getItem("sv_branch")||"").trim();
+    const token = (localStorage.getItem("sv_token")||"").trim();
+    if(!owner || !repo) return null;
+    return { owner, repo, branch: branch || null, token: token || null };
+  }
+
   async function fetchJsonSmart(path){
     // 1) raw github main/master (gyorsabb mint pages cache)
-    const or = getOwnerRepoFromUrl();
+    const or = getOwnerRepoFromUrl() || getOwnerRepoCfg();
     const ts = Date.now();
     if(or){
-      // Pages sokszor main/master/gh-pages ágon van, de a default_branch is lehet bármi
-      const def = await getDefaultBranch(or);
-      const branches = [def, "main", "master", "gh-pages"].filter((v,i,a)=> v && a.indexOf(v)===i);
-      for(const br of branches){
+      for(const br of ["main","master"]){
         const raw = `https://raw.githubusercontent.com/${or.owner}/${or.repo}/${br}/${path}?v=${ts}`;
         try{
           const r = await fetch(raw, { cache:"no-store" });
@@ -71,9 +55,7 @@
   }
 
   function getName(p){
-    return state.lang === "en"
-      ? (p.name_en || p.name_hu || p.name || "")
-      : (p.name_hu || p.name_en || p.name || "");
+    return (p.name_hu || p.name_en || p.name || "");
   }
   function getFlavor(p){
     return state.lang === "en"
@@ -83,7 +65,7 @@
 
   function catLabel(c){
     if(!c) return "";
-    return state.lang === "en" ? (c.label_en || c.label_hu || c.id) : (c.label_hu || c.label_en || c.id);
+    return (c.label_hu || c.label_en || c.id);
   }
 
   function orderedCategories(){
@@ -159,7 +141,7 @@
         if(!map.has(key)) map.set(key, []);
         map.get(key).push(p);
       }
-      const keys = [...map.keys()].sort((a,b)=> a.localeCompare(b, state.lang === "hu" ? "hu" : "en"));
+      const keys = [...map.keys()].sort((a,b)=> a.localeCompare(b, "hu"));
       const out = [];
       for(const k of keys){
         const items = map.get(k);
@@ -211,6 +193,7 @@
       const flavor = getFlavor(p);
       const stock = Math.max(0, Number(p.stock || 0));
       const out = isOut(p);
+      const stockShown = out ? 0 : stock;
       const price = effectivePrice(p);
 
       const card = document.createElement("div");
@@ -223,6 +206,12 @@
       img.loading = "lazy";
       img.alt = (name + (flavor ? " - " + flavor : "")).trim();
       img.src = p.image || "";
+      // státusz alapú szürkeség (CSS nélkül)
+      if(out){
+        img.style.filter = "grayscale(1) brightness(0.40) contrast(0.95)";
+      }else if(p.status === "soon"){
+        img.style.filter = "grayscale(1) brightness(0.62) contrast(0.98)";
+      }
       hero.appendChild(img);
 
       const badges = document.createElement("div");
@@ -248,6 +237,10 @@
       const f = document.createElement("div");
       f.className = "flavor";
       f.textContent = flavor || "";
+      // olvashatóság (CSS nélkül)
+      f.style.fontSize = "15px";
+      f.style.opacity = "0.92";
+      f.style.letterSpacing = "0.2px";
       ov.appendChild(n);
       ov.appendChild(f);
       hero.appendChild(ov);
@@ -265,7 +258,11 @@
 
       const stockEl = document.createElement("div");
       stockEl.className = "stock";
-      stockEl.innerHTML = `${t("stock")}: <b>${p.status === "soon" ? "—" : stock}</b> ${p.status === "soon" ? "" : t("pcs")}`;
+      stockEl.innerHTML = `${t("stock")}: <b>${p.status === "soon" ? "—" : stockShown}</b> ${p.status === "soon" ? "" : t("pcs")}`;
+      stockEl.style.fontSize = "13.5px";
+      stockEl.style.opacity = "0.90";
+      const sb = stockEl.querySelector("b");
+      if(sb){ sb.style.fontSize = "14px"; sb.style.opacity = "0.98"; }
 
       meta.appendChild(priceEl);
       meta.appendChild(stockEl);
@@ -292,6 +289,33 @@
       renderGrid();
     });
 
+    // ✅ élő frissítés admin mentésnél (ha nyitva van a katalógus)
+    const applyLive = (payload) => {
+      if(payload && payload.doc){
+        state.productsDoc = payload.doc;
+        renderNav();
+        renderGrid();
+        $("#loader").style.display = "none";
+        $("#app").style.display = "block";
+      }
+    };
+
+    try{
+      const cached = localStorage.getItem("sv_live_payload");
+      if(cached) applyLive(JSON.parse(cached));
+    }catch{}
+
+    try{
+      const ch = new BroadcastChannel("sv_live");
+      ch.onmessage = (ev) => applyLive(ev.data);
+    }catch{}
+
+    window.addEventListener("storage", (e) => {
+      if(e.key === "sv_live_payload" && e.newValue){
+        try{ applyLive(JSON.parse(e.newValue)); }catch{}
+      }
+    });
+
     $("#loaderText").textContent = "Termékek betöltése...";
     const data = await fetchJsonSmart("data/products.json");
     if(Array.isArray(data)){
@@ -302,6 +326,12 @@
         products: Array.isArray(data.products) ? data.products : []
       };
     }
+
+    try{
+      const old = JSON.parse(localStorage.getItem("sv_live_payload") || "null");
+      const payload = Object.assign({}, old||{}, { doc: state.productsDoc, ts: Date.now() });
+      localStorage.setItem("sv_live_payload", JSON.stringify(payload));
+    }catch{}
 
     renderNav();
     renderGrid();
