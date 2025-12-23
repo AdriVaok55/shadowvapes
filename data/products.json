@@ -1,6 +1,7 @@
 {
   "categories": [
     "Összes termék",
+    "ELF",
     "Vapsolo 80k",
     "Hamarosan"
   ],
@@ -17,9 +18,9 @@
       },
       "category": "ELF",
       "price": 6000,
-      "stock": 0,
+      "stock": 4,
       "image": "https://ezigisale.com/wp-content/uploads/2025/03/Pinke_lemonade.png",
-      "status": "out",
+      "status": "ok",
       "statusLocked": false
     },
     {
@@ -51,7 +52,7 @@
       },
       "category": "Vapsolo 80k",
       "price": 6500,
-      "stock": 5,
+      "stock": 10,
       "image": "https://ezigisale.com/wp-content/uploads/2025/10/10.MOJITO-MONSTER-MANGO-LADY-KILLER-PINK-LEMONADE.png",
       "status": "ok",
       "statusLocked": false
@@ -68,7 +69,7 @@
       },
       "category": "ELF",
       "price": 6000,
-      "stock": 8,
+      "stock": 10,
       "image": "https://ezigisale.com/wp-content/uploads/2025/03/Grape_ice.png",
       "status": "ok",
       "statusLocked": false
