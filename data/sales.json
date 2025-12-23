@@ -13,6 +13,20 @@
         "qty": 2,
         "unit": 6000
       }
+    },
+    {
+      "id": "d81356ec4bd5a19b493ac943",
+      "ts": "2025-12-23T03:22:00.000Z",
+      "buyer": "E. Zoli",
+      "pay": "sdf",
+      "note": "",
+      "item": {
+        "productId": "cb7fa66a7786b819b492e455e",
+        "nameHu": "Vapsolo Quads 80k 4 Ã­zÅ±",
+        "nameEn": "Vapsolo Quads 80k 4 Ã­zÅ±",
+        "qty": 4,
+        "unit": 6500
+      }
     }
   ]
 }
