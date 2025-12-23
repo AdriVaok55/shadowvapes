@@ -1,6 +1,14 @@
 (() => {
   const API = "https://api.github.com";
 
+  // GitHub Contents API útvonal: a "/" maradjon "/" (különben data%2Fproducts.json lesz)
+  function encodePath(path){
+    return String(path || "")
+      .split("/")
+      .map(seg => encodeURIComponent(seg))
+      .join("/");
+  }
+
   function toBase64Unicode(str){
     const bytes = new TextEncoder().encode(str);
     let bin = "";
@@ -13,20 +21,12 @@
     return new TextDecoder().decode(bytes);
   }
 
-  // GitHub Contents API: a path-ban a / maradjon /, csak a szegmenseket encode-oljuk
-  function encodePath(path){
-    return String(path || "")
-      .split("/")
-      .map(seg => encodeURIComponent(seg))
-      .join("/");
-  }
-
   async function ghRequest(token, method, url, body){
     const res = await fetch(url, {
       method,
       headers: {
         "Accept": "application/vnd.github+json",
-        "Authorization": `token ${token}`,
+        "Authorization": `Bearer ${token}`,
         "Content-Type": "application/json"
       },
       body: body ? JSON.stringify(body) : undefined
@@ -63,5 +63,24 @@
     return await ghRequest(token, "PUT", url, body);
   }
 
-  window.ShadowGH = { getFile, putFile };
+  // Biztonságos mentés: SHA mismatch esetén friss SHA-val újrapróbálja
+  async function putFileSafe({token, owner, repo, path, branch, message, content, sha, retries=2}){
+    let curSha = sha;
+    for(let i=0;i<=retries;i++){
+      try{
+        return await putFile({token, owner, repo, path, branch, message, content, sha: curSha});
+      }catch(e){
+        const msg = String(e?.message || "");
+        const retryable = e?.status === 409 || msg.includes("does not match") || msg.includes("expected") || msg.includes("is at");
+        if(i < retries && retryable){
+          const latest = await getFile({token, owner, repo, path, branch});
+          curSha = latest.sha;
+          continue;
+        }
+        throw e;
+      }
+    }
+  }
+
+  window.ShadowGH = { getFile, putFile, putFileSafe };
 })();

@@ -13,8 +13,10 @@
     sales: [],
     loaded: false,
     saving: false,
+    saveQueued: false,
     dirty: false,
     saveTimer: null,
+    shas: { products: null, sales: null },
     filters: {
       productsCat: "all",
       salesCat: "all",
@@ -171,39 +173,9 @@
   }
 
   /* ---------- GitHub load/save ---------- */
-  const _defaultBranchCache = new Map();
-
-  async function getDefaultBranch(cfg){
-    const key = `${cfg.owner}/${cfg.repo}`;
-    if(_defaultBranchCache.has(key)) return _defaultBranchCache.get(key);
-
-    try{
-      const url = `https://api.github.com/repos/${encodeURIComponent(cfg.owner)}/${encodeURIComponent(cfg.repo)}`;
-      const res = await fetch(url, {
-        method: "GET",
-        headers: {
-          "Accept": "application/vnd.github+json",
-          "Authorization": `token ${cfg.token}`
-        },
-        cache: "no-store"
-      });
-      if(res.ok){
-        const data = await res.json();
-        const b = data && data.default_branch ? String(data.default_branch) : null;
-        _defaultBranchCache.set(key, b);
-        return b;
-      }
-    }catch{}
-
-    _defaultBranchCache.set(key, null);
-    return null;
-  }
-
   async function tryLoadFromGithub(cfg){
     // branch fallback main/master automatikusan, ha “No commit found for the ref ...”
-    // + gh-pages (sokan azon hostolnak)
-    const def = await getDefaultBranch(cfg);
-    const branchesToTry = [cfg.branch, def, "main", "master", "gh-pages"].filter((v,i,a)=> v && a.indexOf(v)===i);
+    const branchesToTry = [cfg.branch, "main", "master"].filter((v,i,a)=> v && a.indexOf(v)===i);
 
     let lastErr = null;
     for(const br of branchesToTry){
@@ -218,6 +190,8 @@
 
         state.doc = doc;
         state.sales = sales;
+        state.shas.products = p.sha;
+        state.shas.sales = s.sha;
         normalizeDoc();
         state.loaded = true;
 
@@ -241,7 +215,7 @@
     setSaveStatus("busy","Betöltés...");
     const r = await tryLoadFromGithub(cfg);
     if(!r.ok){
-      setSaveStatus("bad", `Betöltés hiba: ${(r.err && r.err.message) ? r.err.message : "?"}`);
+      setSaveStatus("bad","Betöltés hiba");
       return;
     }
 
@@ -252,6 +226,14 @@
   async function saveDataNow(){
     if(!state.loaded) return;
 
+    // Ne fusson párhuzamos mentés (különben SHA mismatch)
+    if(state.saving){
+      state.saveQueued = true;
+      state.dirty = true;
+      setSaveStatus("busy","Mentés sorban…");
+      return;
+    }
+
     const cfg = getCfg();
     saveCfg(cfg);
     if(!cfg.owner || !cfg.repo || !cfg.token){
@@ -260,6 +242,8 @@
     }
 
     state.saving = true;
+    state.saveQueued = false;
+    state.dirty = false;
     setSaveStatus("busy","Mentés...");
 
     // biztos rend
@@ -268,29 +252,37 @@
     const productsText = JSON.stringify(state.doc, null, 2);
     const salesText = JSON.stringify(state.sales, null, 2);
 
+    let ok = false;
     try{
-      // gyorsítsunk: párhuzamos GET/PUT
-      const [pOld, sOld] = await Promise.all([
-        ShadowGH.getFile({ token: cfg.token, owner: cfg.owner, repo: cfg.repo, branch: cfg.branch, path: "data/products.json" }),
-        ShadowGH.getFile({ token: cfg.token, owner: cfg.owner, repo: cfg.repo, branch: cfg.branch, path: "data/sales.json" })
-      ]);
+      // Használjuk a cache-elt SHA-t (gyorsabb), de mismatch esetén a github.js újrapróbálja friss SHA-val
+      if(!state.shas.products){
+        const pOld = await ShadowGH.getFile({ token: cfg.token, owner: cfg.owner, repo: cfg.repo, branch: cfg.branch, path: "data/products.json" });
+        state.shas.products = pOld.sha;
+      }
+      if(!state.shas.sales){
+        const sOld = await ShadowGH.getFile({ token: cfg.token, owner: cfg.owner, repo: cfg.repo, branch: cfg.branch, path: "data/sales.json" });
+        state.shas.sales = sOld.sha;
+      }
 
-      await Promise.all([
-        ShadowGH.putFile({
-          token: cfg.token, owner: cfg.owner, repo: cfg.repo, branch: cfg.branch,
-          path: "data/products.json",
-          message: "Update products.json",
-          content: productsText,
-          sha: pOld.sha
-        }),
-        ShadowGH.putFile({
-          token: cfg.token, owner: cfg.owner, repo: cfg.repo, branch: cfg.branch,
-          path: "data/sales.json",
-          message: "Update sales.json",
-          content: salesText,
-          sha: sOld.sha
-        })
-      ]);
+      const pRes = await ShadowGH.putFileSafe({
+        token: cfg.token, owner: cfg.owner, repo: cfg.repo, branch: cfg.branch,
+        path: "data/products.json",
+        message: "Update products.json",
+        content: productsText,
+        sha: state.shas.products
+      });
+      state.shas.products = pRes?.content?.sha || state.shas.products;
+
+      const sRes = await ShadowGH.putFileSafe({
+        token: cfg.token, owner: cfg.owner, repo: cfg.repo, branch: cfg.branch,
+        path: "data/sales.json",
+        message: "Update sales.json",
+        content: salesText,
+        sha: state.shas.sales
+      });
+      state.shas.sales = sRes?.content?.sha || state.shas.sales;
+
+      ok = true;
 
       // ✅ mentés után automatikus újratöltés
       const rr = await tryLoadFromGithub(cfg);
@@ -300,25 +292,35 @@
       }else{
         setSaveStatus("ok","Mentve ✅ (reload hiba)");
       }
-
-      state.dirty = false;
     }catch(e){
       console.error(e);
-      setSaveStatus("bad", `Mentés hiba: ${(e && e.message) ? e.message : "?"}`);
+      setSaveStatus("bad", `Mentés hiba: ${String(e?.message || e)}`);
+      // hagyjuk dirty-n, de nem loopolunk végtelenbe
+      state.dirty = true;
     }finally{
       state.saving = false;
+
+      // Ha mentés közben jött új változás, és ez a mentés OK volt, futtassuk le még egyszer
+      if(ok && (state.saveQueued || state.dirty)){
+        state.saveQueued = false;
+        if(state.saveTimer) clearTimeout(state.saveTimer);
+        setTimeout(() => saveDataNow(), 350);
+      }
     }
   }
 
   function queueAutoSave(){
     state.dirty = true;
-    if(state.saving) return;
+    if(state.saving){
+      state.saveQueued = true;
+      setSaveStatus("busy","Mentés folyamatban…");
+      return;
+    }
     if(state.saveTimer) clearTimeout(state.saveTimer);
     setSaveStatus("busy","Változás…");
-    // gyorsabb autosave (de nem commit-spam): 600ms
     state.saveTimer = setTimeout(() => {
       saveDataNow();
-    }, 600);
+    }, 650);
   }
 
   /* ---------- Rendering ---------- */
@@ -343,7 +345,7 @@
   function renderSettings(){
     const cfg = loadCfg();
     $("#panelSettings").innerHTML = `
-      <div class="small-muted">GitHub mentés (token localStorage-ben). Branch: ha rossz, automatikusan próbál main/master/gh-pages.</div>
+      <div class="small-muted">GitHub mentés (token localStorage-ben). Branch: ha rossz, automatikusan próbál main/master.</div>
       <div class="form-grid" style="margin-top:12px;">
         <div class="field third"><label>Owner</label><input id="cfgOwner" value="${escapeHtml(cfg.owner)}" placeholder="pl. tesouser" /></div>
         <div class="field third"><label>Repo</label><input id="cfgRepo" value="${escapeHtml(cfg.repo)}" placeholder="pl. shadowvapes" /></div>
@@ -473,7 +475,7 @@
       const eff = effectivePrice(p);
 
       return `
-        <div class="rowline">
+        <div class="rowline table">
           <div class="left">
             <div style="font-weight:900;">${escapeHtml(p.name_hu||p.name_en||"—")} <span class="small-muted">• ${escapeHtml(p.flavor_hu||p.flavor_en||"")}</span></div>
             <div class="small-muted">
@@ -501,7 +503,7 @@
     }).join("");
 
     $("#panelProducts").innerHTML = `
-      <div class="actions" style="align-items:center;">
+      <div class="actions table" style="align-items:center;">
         <button class="primary" id="btnAddProd">+ Termék</button>
         <select id="prodCat">
           ${cats.map(c => `<option value="${escapeHtml(c.id)}"${c.id===filterCat?" selected":""}>${escapeHtml(c.label)}</option>`).join("")}
@@ -647,8 +649,7 @@
 
     const rows = list.map(s => {
       const tot = saleTotals(s, filterCat);
-      // kategória szűrésnél is korrekt mennyiséget mutasson
-      const itemsCount = Number(tot.qty || 0);
+      const itemsCount = s.items.reduce((acc,it)=> acc + Number(it.qty||0), 0);
 
       return `
         <div class="rowline">
@@ -668,7 +669,7 @@
     }).join("");
 
     $("#panelSales").innerHTML = `
-      <div class="actions" style="align-items:center;">
+      <div class="actions table" style="align-items:center;">
         <button class="primary" id="btnAddSale">+ Eladás</button>
         <select id="salesCat">
           ${cats.map(c => `<option value="${escapeHtml(c.id)}"${c.id===filterCat?" selected":""}>${escapeHtml(c.label)}</option>`).join("")}
@@ -711,7 +712,8 @@
 
     const addItemRow = () => {
       const row = document.createElement("div");
-      row.className = "rowline";
+      // a CSS input/select stílus a .table alatt él, ezért kap pluszban table osztályt
+      row.className = "rowline table";
       row.innerHTML = `
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;width:100%;">
           <select class="it_prod" style="min-width:280px;">
@@ -850,7 +852,7 @@
     const cats = [{id:"all", label:"Mind"}, ...state.doc.categories.map(c=>({id:c.id,label:c.label_hu||c.id}))];
 
     $("#panelChart").innerHTML = `
-      <div class="actions" style="align-items:center;">
+      <div class="actions table" style="align-items:center;">
         <select id="chartCat">
           ${cats.map(c => `<option value="${escapeHtml(c.id)}"${c.id===state.filters.chartCat?" selected":""}>${escapeHtml(c.label)}</option>`).join("")}
         </select>
