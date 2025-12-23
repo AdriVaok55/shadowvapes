@@ -1,4 +1,11 @@
 {
-  "categories": [],
+  "categories": [
+    {
+      "id": "elf30",
+      "label_hu": "Elfbar Ice King 30k",
+      "label_en": "Elfbar Ice King 30k",
+      "basePrice": 6000
+    }
+  ],
   "products": []
 }
