@@ -7,50 +7,50 @@
   <link rel="stylesheet" href="assets/styles.css" />
 </head>
 <body>
-
   <div id="loader">
-    <div class="loader-card fade-in">
+    <div class="loader-card">
       <div class="loader-top">
         <div class="loader-logo">Shadow<span style="background:linear-gradient(90deg,var(--brand),var(--brand2));-webkit-background-clip:text;background-clip:text;color:transparent;">Vapes</span></div>
         <div class="pulse"></div>
       </div>
       <div class="loader-bar"><div></div></div>
-      <div class="loader-sub" id="loaderText">Betöltés…</div>
+      <div class="loader-sub" id="loaderText">Betöltés...</div>
     </div>
   </div>
 
-  <div class="wrap">
+  <div class="wrap" style="display:none" id="appRoot">
     <aside class="sidebar">
       <div class="brand">Shadow<span>Vapes</span></div>
 
-      <div class="nav" id="nav"></div>
+      <div class="nav" id="catNav"></div>
 
       <div class="sidebar-bottom">
         <div class="pill">
-          Termékek: <b id="count">0</b>
-          <button id="langBtn" title="HU/EN">HU</button>
+          <b id="countText">0</b>
+          <span>termék</span>
         </div>
+
         <div class="pill">
-          Admin
-          <a style="margin-left:auto; padding:7px 10px; border-radius:999px; background:rgba(124,92,255,.16);" href="admin.html">Megnyit</a>
+          <span>Nyelv</span>
+          <b id="langLabel">HU</b>
+          <button id="langBtn">Vált</button>
         </div>
+
+        <a class="pill" href="admin.html" style="justify-content:space-between">
+          <span>Admin</span>
+          <b>→</b>
+        </a>
       </div>
     </aside>
 
     <main class="main">
       <div class="topbar">
-        <div class="h1" id="title">Összes termék</div>
-        <div class="search">
-          <input id="search" placeholder="Keresés név / íz…" />
-          <button id="clear">Törlés</button>
-        </div>
+        <div class="h1" id="pageTitle">Összes termék</div>
+        <input class="search" id="search" placeholder="Keresés név/íz alapján..." />
       </div>
 
       <div class="grid" id="grid"></div>
-
-      <div class="small-muted" id="empty" style="margin-top:12px; display:none;">
-        Nincs találat ebben a kategóriában.
-      </div>
+      <div class="small-muted" id="empty" style="margin-top:10px; display:none;">Nincs találat.</div>
     </main>
   </div>
 
