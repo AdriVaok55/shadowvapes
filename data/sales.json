@@ -1,3 +1,11 @@
-{
-  "sales": []
-}
+[
+  {
+    "id": "s1",
+    "date": "2025-12-23",
+    "name": "Zoli",
+    "payment": "KP",
+    "items": [
+      { "productId": "p1", "qty": 2, "unitPrice": 5990 }
+    ]
+  }
+]
