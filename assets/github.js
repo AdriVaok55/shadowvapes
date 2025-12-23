@@ -1,69 +1,45 @@
-/* assets/github.js */
-(function () {
-  function b64EncodeUtf8(str) {
-    return btoa(unescape(encodeURIComponent(str)));
-  }
-  function b64DecodeUtf8(b64) {
-    return decodeURIComponent(escape(atob(b64)));
-  }
+(function(){
+  const API = "https://api.github.com";
 
-  async function ghFetch(url, token, opts = {}) {
-    const headers = Object.assign(
-      {
+  async function ghRequest(token, method, url, body){
+    const res = await fetch(url, {
+      method,
+      headers: {
         "Accept": "application/vnd.github+json",
-        "X-GitHub-Api-Version": "2022-11-28",
+        "Authorization": `Bearer ${token}`,
+        "Content-Type": "application/json"
       },
-      opts.headers || {}
-    );
-    if (token) headers.Authorization = `token ${token}`;
-    const res = await fetch(url, { ...opts, headers });
-    if (!res.ok) {
-      const txt = await res.text().catch(() => "");
-      throw new Error(`GitHub API hiba (${res.status}): ${txt.slice(0, 200)}`);
-    }
-    return res.json();
-  }
-
-  async function getFile({ owner, repo, path, branch, token }) {
-    const url = `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURIComponent(path)}?ref=${encodeURIComponent(branch)}`;
-    const data = await ghFetch(url, token);
-    if (!data || !data.content) throw new Error("Nem jött content.");
-    const text = b64DecodeUtf8(data.content.replace(/\n/g, ""));
-    return { text, sha: data.sha };
-  }
-
-  async function putFile({ owner, repo, path, branch, token, message, contentText, sha }) {
-    const url = `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURIComponent(path)}`;
-    const body = {
-      message: message || `Update ${path}`,
-      content: b64EncodeUtf8(contentText),
-      branch,
-    };
-    if (sha) body.sha = sha;
-
-    return ghFetch(url, token, {
-      method: "PUT",
-      body: JSON.stringify(body),
+      body: body ? JSON.stringify(body) : undefined
     });
-  }
 
-  async function readJson(cfg) {
-    const { text } = await getFile(cfg);
-    return JSON.parse(text);
-  }
+    const text = await res.text();
+    let data = null;
+    try { data = text ? JSON.parse(text) : null; } catch { data = text; }
 
-  async function writeJson(cfg, obj) {
-    let sha = null;
-    try {
-      const current = await getFile(cfg);
-      sha = current.sha;
-    } catch (e) {
-      // file may not exist yet
-      sha = null;
+    if(!res.ok){
+      const msg = (data && data.message) ? data.message : `HTTP ${res.status}`;
+      throw new Error(msg);
     }
-    const text = JSON.stringify(obj, null, 2);
-    return putFile({ ...cfg, contentText: text, sha });
+    return data;
   }
 
-  window.SV_GH = { getFile, putFile, readJson, writeJson };
+  async function getFile({token, owner, repo, path, branch}){
+    const url = `${API}/repos/${owner}/${repo}/contents/${encodeURIComponent(path)}?ref=${encodeURIComponent(branch)}`;
+    const data = await ghRequest(token, "GET", url);
+    const content = atob((data.content || "").replace(/\n/g, ""));
+    return { sha: data.sha, content };
+  }
+
+  async function putFile({token, owner, repo, path, branch, message, content, sha}){
+    const url = `${API}/repos/${owner}/${repo}/contents/${encodeURIComponent(path)}`;
+    const body = {
+      message,
+      branch,
+      content: btoa(unescape(encodeURIComponent(content))),
+    };
+    if(sha) body.sha = sha;
+    return await ghRequest(token, "PUT", url, body);
+  }
+
+  window.ShadowGH = { getFile, putFile };
 })();
