@@ -7,59 +7,51 @@
   <link rel="stylesheet" href="assets/styles.css" />
 </head>
 <body>
-
-<div id="loader">
-  <div class="loader-card">
-    <div class="loader-top">
-      <div class="loader-logo">Shadow<span style="background:linear-gradient(90deg,var(--brand),var(--brand2));-webkit-background-clip:text;background-clip:text;color:transparent;">Vapes</span></div>
-      <div class="pulse"></div>
-    </div>
-    <div class="loader-bar"><div></div></div>
-    <div class="loader-sub" id="loaderText">Betöltés...</div>
-  </div>
-</div>
-
-<div class="wrap" id="app" style="display:none;">
-  <aside class="sidebar">
-    <div class="brand">Shadow<span>Vapes</span></div>
-
-    <div class="nav" id="nav"></div>
-
-    <div class="sidebar-bottom">
-      <div class="pill">
-        <span id="countText">0 db</span>
-        <button id="langBtn" type="button">HU</button>
+  <div id="loader">
+    <div class="loader-card">
+      <div class="loader-top">
+        <div class="loader-logo">Shadow<span style="background:linear-gradient(90deg,var(--brand),var(--brand2));-webkit-background-clip:text;background-clip:text;color:transparent;">Vapes</span></div>
+        <div class="pulse"></div>
       </div>
-      <div class="pill">
-        <span>Keresés: <b id="activeInfo">Összes</b></span>
-      </div>
-    </div>
-  </aside>
-
-  <main class="main">
-    <div class="topbar">
-      <div class="h1" id="title">Termékek</div>
-      <div class="search">
-        <input id="search" placeholder="Keresés név / íz..." />
-        <button id="clearSearch" type="button">✕</button>
-      </div>
-    </div>
-
-    <div class="grid" id="grid"></div>
-    <div class="small-muted" id="empty" style="margin-top:12px; display:none;">Nincs találat.</div>
-  </main>
-</div>
-
-<div class="modal-backdrop" id="modalBackdrop">
-  <div class="modal fade-in" id="modal">
-    <h2 id="mTitle">Termék</h2>
-    <p id="mDesc">—</p>
-    <div class="row">
-      <button id="mClose" type="button">Bezár</button>
+      <div class="loader-bar"><div></div></div>
+      <div class="loader-sub">Betöltés…</div>
     </div>
   </div>
-</div>
 
-<script src="assets/app.js"></script>
+  <div class="wrap" id="app" style="display:none;">
+    <aside class="sidebar">
+      <div class="brand">Shadow<span>Vapes</span></div>
+
+      <div class="nav" id="categoryNav"></div>
+
+      <div class="sidebar-bottom">
+        <div class="pill">
+          Nyelv: <b id="langLabel">HU</b>
+          <button id="langBtn">Váltás</button>
+        </div>
+        <div class="pill">
+          Termékek: <b id="countLabel">0</b>
+        </div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <div class="topbar">
+        <div class="h1" id="pageTitle">Termékek</div>
+        <div class="search">
+          <input id="search" placeholder="Keresés név / íz..." />
+          <button id="clear">Törlés</button>
+        </div>
+      </div>
+
+      <div class="grid" id="grid"></div>
+
+      <div class="small-muted" id="empty" style="display:none; margin-top:14px;">
+        Nincs találat.
+      </div>
+    </main>
+  </div>
+
+  <script src="assets/app.js"></script>
 </body>
 </html>
