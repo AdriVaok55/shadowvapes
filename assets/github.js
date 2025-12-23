@@ -1,17 +1,7 @@
-(() => {
+(function(){
   const API = "https://api.github.com";
 
-  function toBase64Unicode(str){
-    const bytes = new TextEncoder().encode(str);
-    let bin = "";
-    bytes.forEach(b => bin += String.fromCharCode(b));
-    return btoa(bin);
-  }
-  function fromBase64Unicode(b64){
-    const bin = atob((b64 || "").replace(/\n/g,""));
-    const bytes = Uint8Array.from(bin, c => c.charCodeAt(0));
-    return new TextDecoder().decode(bytes);
-  }
+  function clean(s){ return (s||"").toString().trim(); }
 
   async function ghRequest(token, method, url, body){
     const res = await fetch(url, {
@@ -30,26 +20,28 @@
 
     if(!res.ok){
       const msg = (data && data.message) ? data.message : `HTTP ${res.status}`;
-      const err = new Error(msg);
-      err.status = res.status;
-      throw err;
+      throw new Error(msg);
     }
     return data;
   }
 
   async function getFile({token, owner, repo, path, branch}){
+    owner = clean(owner); repo = clean(repo); path = clean(path);
+    branch = clean(branch) || "main";
     const url = `${API}/repos/${owner}/${repo}/contents/${encodeURIComponent(path)}?ref=${encodeURIComponent(branch)}`;
     const data = await ghRequest(token, "GET", url);
-    const content = fromBase64Unicode(data.content || "");
+    const content = atob((data.content || "").replace(/\n/g, ""));
     return { sha: data.sha, content };
   }
 
   async function putFile({token, owner, repo, path, branch, message, content, sha}){
+    owner = clean(owner); repo = clean(repo); path = clean(path);
+    branch = clean(branch) || "main";
     const url = `${API}/repos/${owner}/${repo}/contents/${encodeURIComponent(path)}`;
     const body = {
       message,
       branch,
-      content: toBase64Unicode(content),
+      content: btoa(unescape(encodeURIComponent(content))),
     };
     if(sha) body.sha = sha;
     return await ghRequest(token, "PUT", url, body);
