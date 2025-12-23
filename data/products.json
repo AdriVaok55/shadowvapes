@@ -3,16 +3,18 @@
     "Összes termék",
     "Ãsszes termÃ©k",
     "ÃÂsszes termÃÂ©k",
-    "gamer egÃÂ©r",
-    "gamer billentyÃÂ±zet"
+    "ÃÂÃÂsszes termÃÂÃÂ©k",
+    "gamer egÃÂÃÂ©r",
+    "gamer billentyÃÂÃÂ±zet",
+    "Elfbar"
   ],
   "products": [
     {
       "id": "p1",
-      "name": "PÃÂ©lda EgÃÂ©r",
-      "category": "gamer egÃÂ©r",
+      "name": "PÃÂÃÂ©lda EgÃÂÃÂ©r",
+      "category": "gamer egÃÂÃÂ©r",
       "image": "https://picsum.photos/seed/mouse/800/600",
-      "description": "Ez csak egy pÃÂ©lda termÃÂ©k.",
+      "description": "Ez csak egy pÃÂÃÂ©lda termÃÂÃÂ©k.",
       "quantity": 3,
       "soldOut": false,
       "updatedAt": "2025-12-23T01:08:36.099Z"
