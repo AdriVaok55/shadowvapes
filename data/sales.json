@@ -1,3 +1,18 @@
 {
-  "sales": []
+  "sales": [
+    {
+      "id": "4309b90c228ef19b492c546d",
+      "ts": "2025-12-23T03:06:00.000Z",
+      "buyer": "B. Zsolt",
+      "pay": "Vásárláskor kp",
+      "note": "",
+      "item": {
+        "productId": "9e1a214d6df2219b491fd485",
+        "nameHu": "Elfbar Ice King 30k slukk",
+        "nameEn": "Elfbar Ice King 30k slukk",
+        "qty": 2,
+        "unit": 6000
+      }
+    }
+  ]
 }
