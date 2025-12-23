@@ -1,4 +1,10 @@
 [
-  { "id": "gamer_eger", "name": "Gamer egér" },
-  { "id": "gamer_bill", "name": "Gamer billentyűzet" }
+  {
+    "id": "gamer_eger",
+    "name": "Gamer egér"
+  },
+  {
+    "id": "gamer_bill",
+    "name": "Gamer billentyűzet"
+  }
 ]
