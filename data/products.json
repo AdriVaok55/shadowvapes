@@ -18,9 +18,9 @@
       },
       "category": "ELF",
       "price": 6000,
-      "stock": 4,
+      "stock": 0,
       "image": "https://ezigisale.com/wp-content/uploads/2025/03/Pinke_lemonade.png",
-      "status": "ok",
+      "status": "out",
       "statusLocked": false
     },
     {
@@ -52,7 +52,7 @@
       },
       "category": "Vapsolo 80k",
       "price": 6500,
-      "stock": 10,
+      "stock": 5,
       "image": "https://ezigisale.com/wp-content/uploads/2025/10/10.MOJITO-MONSTER-MANGO-LADY-KILLER-PINK-LEMONADE.png",
       "status": "ok",
       "statusLocked": false
@@ -69,7 +69,7 @@
       },
       "category": "ELF",
       "price": 6000,
-      "stock": 10,
+      "stock": 8,
       "image": "https://ezigisale.com/wp-content/uploads/2025/03/Grape_ice.png",
       "status": "ok",
       "statusLocked": false
