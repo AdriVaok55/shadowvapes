@@ -4,49 +4,29 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>ShadowVapes</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
-  <!-- Loading overlay -->
-  <div id="loader" class="loader">
-    <div class="loader__card">
-      <div class="spinner"></div>
-      <div class="loader__text">Betöltés...</div>
-    </div>
-  </div>
-
-  <div class="layout">
+  <div class="app fade-in">
     <aside class="sidebar">
-      <div class="brand">
-        <div class="brand__logo">ShadowVapes</div>
-        <div class="brand__sub">Készlet & termékek</div>
-      </div>
-
-      <nav class="nav">
-        <button class="nav__btn is-active" data-cat="all">Összes termék</button>
-        <div id="catButtons"></div>
-      </nav>
-
-      <div class="sidebar__footer">
-        <div class="hint">A készletet az admin oldalon tudod frissíteni.</div>
+      <div class="logo">ShadowVapes</div>
+      <div class="nav" id="catNav"></div>
+      <div style="margin-top:14px" class="smallmuted">
+        Admin: <a href="./admin.html">/admin.html</a>
       </div>
     </aside>
 
     <main class="main">
-      <header class="topbar">
-        <div class="topbar__title" id="pageTitle">Összes termék</div>
-      </header>
-
-      <section class="grid" id="productGrid"></section>
-      <div class="empty" id="emptyState" hidden>
-        Nincs termék ebben a kategóriában.
+      <div class="topbar">
+        <div>
+          <div class="smallmuted" id="infoLine">Betöltés...</div>
+        </div>
       </div>
+
+      <section class="grid" id="grid"></section>
     </main>
   </div>
 
-  <script src="./app.js"></script>
+  <script type="module" src="./app.js"></script>
 </body>
 </html>
