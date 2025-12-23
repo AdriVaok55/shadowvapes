@@ -61,17 +61,22 @@ function setBrandName(name){
 }
 
 function buildSidebar(categories){
-  const nav = qs("#nav");
+  const nav = document.getElementById("nav");
   nav.innerHTML = "";
 
-  // Always show: Összes termék + Hamarosan + then other categories (admin-created)
-  const base = ["Összes termék","Hamarosan"];
-  const extra = (categories || []).filter(c=> !base.includes(c));
-  const final = [...base, ...extra];
+  const fixedTop = ["Összes termék"];
+  const fixedBottom = ["Hamarosan"];
 
-  final.forEach(cat=>{
-    const b = el("button", state.activeCategory===cat ? "active" : "");
+  const middle = categories.filter(
+    c => !fixedTop.includes(c) && !fixedBottom.includes(c)
+  );
+
+  const finalCats = [...fixedTop, ...middle, ...fixedBottom];
+
+  finalCats.forEach(cat=>{
+    const b = document.createElement("button");
     b.textContent = cat;
+    if(state.activeCategory === cat) b.classList.add("active");
     b.onclick = ()=>{
       state.activeCategory = cat;
       render();
@@ -79,6 +84,7 @@ function buildSidebar(categories){
     nav.appendChild(b);
   });
 }
+
 
 function formatMoney(v){
   if(v == null || v === "") return "—";
