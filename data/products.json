@@ -1,78 +1,20 @@
 {
+  "updatedAt": "2025-12-23T12:00:00.000Z",
   "categories": [
-    "Összes termék",
-    "ELF",
-    "Vapsolo 80k",
-    "Hamarosan"
+    { "id": "elf", "label_hu": "ELF", "label_en": "ELF", "defaultPrice": 5990 }
   ],
   "products": [
     {
-      "id": "ae77efe4da06c819b4be36bd1",
-      "name": {
-        "hu": "Elfbar Ice King 30k",
-        "en": "Elfbar Ice King 30k"
-      },
-      "flavor": {
-        "hu": "Pink Limonádé",
-        "en": "Pink Limonade"
-      },
-      "category": "ELF",
-      "price": 6000,
-      "stock": 4,
-      "image": "https://ezigisale.com/wp-content/uploads/2025/03/Pinke_lemonade.png",
+      "id": "p1",
+      "categoryId": "elf",
       "status": "ok",
-      "statusLocked": false
-    },
-    {
-      "id": "1661de263ca53819b4bf18785",
-      "name": {
-        "hu": "Elfbar Ice King 30k",
-        "en": "Elfbar Ice King 30k"
-      },
-      "flavor": {
-        "hu": "Red Bull",
-        "en": "Elf Bull"
-      },
-      "category": "ELF",
-      "price": 6000,
       "stock": 10,
-      "image": "https://ezigisale.com/wp-content/uploads/2025/03/Elf_bull.png",
-      "status": "ok",
-      "statusLocked": false
-    },
-    {
-      "id": "94b5301b7457e19b4bf5a679",
-      "name": {
-        "hu": "Vapsolo Quads 80k",
-        "en": "Vapsolo Quads 80k"
-      },
-      "flavor": {
-        "hu": "Mojito & Mangós Monster & Lady Gyilkos & Pink Limonádé",
-        "en": "Mojito & Monster Mango & Lady Killer & Pink Lemonade"
-      },
-      "category": "Vapsolo 80k",
-      "price": 6500,
-      "stock": 10,
-      "image": "https://ezigisale.com/wp-content/uploads/2025/10/10.MOJITO-MONSTER-MANGO-LADY-KILLER-PINK-LEMONADE.png",
-      "status": "ok",
-      "statusLocked": false
-    },
-    {
-      "id": "c2024be6dd647819b4bf9246a",
-      "name": {
-        "hu": "Elfbar Ice King 30k",
-        "en": "Elfbar Ice King 30k"
-      },
-      "flavor": {
-        "hu": "Szőlő Jég",
-        "en": "Grape Ice"
-      },
-      "category": "ELF",
-      "price": 6000,
-      "stock": 10,
-      "image": "https://ezigisale.com/wp-content/uploads/2025/03/Grape_ice.png",
-      "status": "ok",
-      "statusLocked": false
+      "price": null,
+      "image": "https://....",
+      "name_hu": "ELF Bar",
+      "name_en": "ELF Bar",
+      "flavor_hu": "Blue Razz",
+      "flavor_en": "Blue Razz"
     }
   ]
 }
