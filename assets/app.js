@@ -39,7 +39,8 @@ function getOwnerRepoCfg(){
     const or = getOwnerRepoFromUrl() || getOwnerRepoCfg();
     const ts = Date.now();
     if(or){
-      for(const br of ["main","master"]){
+      const branches = [or.branch, "main", "master", "gh-pages"].filter(Boolean).filter((v,i,a)=>a.indexOf(v)===i);
+      for(const br of branches){
         const raw = `https://raw.githubusercontent.com/${or.owner}/${or.repo}/${br}/${path}?v=${ts}`;
         try{
           const r = await fetch(raw, { cache:"no-store" });
@@ -290,9 +291,12 @@ function getOwnerRepoCfg(){
     });
 
     // ✅ élő frissítés admin mentésnél (ha nyitva van a katalógus)
+    let lastSig = "";
+
     const applyLive = (payload) => {
       if(payload && payload.doc){
         state.productsDoc = payload.doc;
+        try{ lastSig = JSON.stringify(state.productsDoc); }catch{}
         renderNav();
         renderGrid();
         $("#loader").style.display = "none";
@@ -327,6 +331,8 @@ function getOwnerRepoCfg(){
       };
     }
 
+    try{ lastSig = JSON.stringify(state.productsDoc); }catch{}
+
     try{
       const old = JSON.parse(localStorage.getItem("sv_live_payload") || "null");
       const payload = Object.assign({}, old||{}, { doc: state.productsDoc, ts: Date.now() });
@@ -335,6 +341,27 @@ function getOwnerRepoCfg(){
 
     renderNav();
     renderGrid();
+
+    // ✅ másik eszközön is gyors frissülés (könnyű poll, no cache)
+    setInterval(async () => {
+      if(document.hidden) return;
+      try{
+        const fresh = await fetchJsonSmart("data/products.json");
+        const doc = Array.isArray(fresh)
+          ? { categories: [], products: fresh }
+          : {
+              categories: Array.isArray(fresh.categories) ? fresh.categories : [],
+              products: Array.isArray(fresh.products) ? fresh.products : []
+            };
+        const sig = JSON.stringify(doc);
+        if(sig && sig !== lastSig){
+          lastSig = sig;
+          state.productsDoc = doc;
+          renderNav();
+          renderGrid();
+        }
+      }catch{}
+    }, 8000);
 
     $("#loader").style.display = "none";
     $("#app").style.display = "grid";

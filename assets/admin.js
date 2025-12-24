@@ -17,6 +17,7 @@
     dirty: false,
     saveTimer: null,
     shas: { products: null, sales: null },
+    clientId: (globalThis.crypto && crypto.randomUUID) ? crypto.randomUUID() : (Date.now().toString(36) + Math.random().toString(36).slice(2)),
     filters: {
       productsCat: "all",
       salesCat: "all",
@@ -68,6 +69,28 @@
   function escapeHtml(s){
     return String(s ?? "").replace(/[&<>"']/g, m => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;" }[m]));
   }
+
+  /* ---------- Cross-tab save lock (ugyanazon böngészőben) ---------- */
+  const LOCK_KEY = "sv_save_lock";
+  function readLock(){
+    try{ return JSON.parse(localStorage.getItem(LOCK_KEY) || "null"); }catch{ return null; }
+  }
+  function lockValid(lock){
+    return !!(lock && lock.id && (Date.now() - Number(lock.ts || 0)) < 15000);
+  }
+  function acquireLock(){
+    const cur = readLock();
+    if(lockValid(cur) && cur.id !== state.clientId) return false;
+    localStorage.setItem(LOCK_KEY, JSON.stringify({ id: state.clientId, ts: Date.now() }));
+    return true;
+  }
+  function releaseLock(){
+    const cur = readLock();
+    if(cur && cur.id === state.clientId) localStorage.removeItem(LOCK_KEY);
+  }
+  // ha crash/bezárás: engedjük el
+  window.addEventListener("beforeunload", releaseLock);
+
 
   /* ---------- Settings ---------- */
   function getCfg(){
@@ -226,6 +249,7 @@
   async function saveDataNow(){
     if(!state.loaded) return;
 
+
     // Ne fusson párhuzamos mentés (különben SHA mismatch)
     if(state.saving){
       state.saveQueued = true;
@@ -238,6 +262,15 @@
     saveCfg(cfg);
     if(!cfg.owner || !cfg.repo || !cfg.token){
       setSaveStatus("bad","Hiányzó GH beállítás");
+      return;
+    }
+
+    // ugyanazon böngészőben: csak 1 admin tab mentsen
+    if(!acquireLock()){
+      state.saveQueued = true;
+      state.dirty = true;
+      setSaveStatus("busy","Másik admin tab ment…");
+      setTimeout(() => saveDataNow(), 1200 + Math.random()*400);
       return;
     }
 
@@ -257,16 +290,13 @@
     const salesText = JSON.stringify(state.sales, null, 2);
 
     let ok = false;
-    try{
-      // Használjuk a cache-elt SHA-t (gyorsabb), de mismatch esetén a github.js újrapróbálja friss SHA-val
-      if(!state.shas.products){
-        const pOld = await ShadowGH.getFile({ token: cfg.token, owner: cfg.owner, repo: cfg.repo, branch: cfg.branch, path: "data/products.json" });
-        state.shas.products = pOld.sha;
-      }
-      if(!state.shas.sales){
-        const sOld = await ShadowGH.getFile({ token: cfg.token, owner: cfg.owner, repo: cfg.repo, branch: cfg.branch, path: "data/sales.json" });
-        state.shas.sales = sOld.sha;
-      }
+    try{      // Mindig friss SHA-val mentsünk (branch váltás / másik eszköz mentése miatt)
+      const [pOld, sOld] = await Promise.all([
+        ShadowGH.getFile({ token: cfg.token, owner: cfg.owner, repo: cfg.repo, branch: cfg.branch, path: "data/products.json" }),
+        ShadowGH.getFile({ token: cfg.token, owner: cfg.owner, repo: cfg.repo, branch: cfg.branch, path: "data/sales.json" }),
+      ]);
+      state.shas.products = pOld.sha;
+      state.shas.sales = sOld.sha;
 
       const pRes = await ShadowGH.putFileSafe({
         token: cfg.token, owner: cfg.owner, repo: cfg.repo, branch: cfg.branch,
@@ -310,6 +340,7 @@
       state.dirty = true;
     }finally{
       state.saving = false;
+      releaseLock();
 
       // Ha mentés közben jött új változás, és ez a mentés OK volt, futtassuk le még egyszer
       if(ok && (state.saveQueued || state.dirty)){
