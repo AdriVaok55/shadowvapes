@@ -4,25 +4,30 @@
   const state = {
     lang: localStorage.getItem("sv_lang") || "hu",
     active: "all",
-    productsDoc: { categories: [], products: [] },
+    productsDoc: { categories: [], products: [], popups: [] },
     sales: [],
     search: "",
     etagProducts: "",
     etagSales: "",
+    featuredByCat: new Map(), // categoryId -> productId
   };
 
   const UI = {
-    all: "Összes termék",
-    soon: "Hamarosan",
-    stock: "Készlet",
-    pcs: "db",
-    out: "Elfogyott",
-    hot: "Felkapott",
-    newTitle: "Új termékek elérhetőek",
-    newDont: "Ne mutasd többször",
-    newOk: "Értettem",
+    all: { hu: "Összes termék", en: "All products" },
+    soon: { hu: "Hamarosan", en: "Coming soon" },
+    stock: { hu: "Készlet", en: "Stock" },
+    pcs: { hu: "db", en: "pcs" },
+    out: { hu: "Elfogyott", en: "Sold out" },
+    hot: { hu: "Felkapott", en: "Trending" },
+    newAvail: { hu: "Új termékek elérhetőek", en: "New products available" },
+    understood: { hu: "Értettem", en: "Got it" },
+    skipAll: { hu: "Összes átugrása", en: "Skip all" },
+    dontShow: { hu: "Ne mutasd többször", en: "Don't show again" },
   };
-  const t = (k) => UI[k] || k;
+
+  const t = (k) => (UI[k] ? UI[k][state.lang] : k);
+
+  const locale = () => (state.lang === "en" ? "en" : "hu");
 
   const norm = (s) =>
     (s || "")
@@ -32,7 +37,7 @@
       .replace(/[\u0300-\u036f]/g, "");
 
   function catLabel(c) {
-    return (c && (c.label_hu || c.label_en || c.id)) || "";
+    return (c && (state.lang === "en" ? (c.label_en || c.label_hu || c.id) : (c.label_hu || c.label_en || c.id))) || "";
   }
 
   function getName(p) {
@@ -43,9 +48,6 @@
     return state.lang === "en"
       ? (p.flavor_en || p.flavor_hu || p.flavor || "")
       : (p.flavor_hu || p.flavor_en || p.flavor || "");
-  }
-  function localeForLang() {
-    return state.lang === "en" ? "en" : "hu";
   }
 
   function effectivePrice(p) {
@@ -59,146 +61,11 @@
   function isOut(p) {
     const st = (p && p.status) || "ok";
     const stock = Math.max(0, Number(p && p.stock ? p.stock : 0));
-    // soon-nál a stock ne csinálja out-t
-    return st === "out" || (st !== "soon" && stock <= 0);
+    return st === "out" || stock <= 0;
   }
 
-  function ensureInjectedStyles() {
-    if (document.getElementById("sv_hot_styles")) return;
-
-    const style = document.createElement("style");
-    style.id = "sv_hot_styles";
-    style.textContent = `
-      /* HOT border: 1 szín szegmens körbemegy, fade, szín vált */
-      .sv-hot { position: relative; }
-      .sv-hot::before{
-        content:"";
-        position:absolute;
-        inset:-2px;
-        border-radius: 22px;
-        padding:2px;
-        background:
-          conic-gradient(from 0deg,
-            rgba(0,0,0,0) 0deg 322deg,
-            var(--svHot, rgba(0,212,255,.95)) 322deg 360deg
-          );
-        -webkit-mask:
-          linear-gradient(#000 0 0) content-box,
-          linear-gradient(#000 0 0);
-        -webkit-mask-composite: xor;
-                mask-composite: exclude;
-        filter: blur(.0px);
-        opacity: .92;
-        pointer-events:none;
-        animation: svHotSpin 1.85s linear infinite, svHotColor 7.8s linear infinite, svHotPulse 1.85s ease-in-out infinite;
-      }
-      .sv-hot::after{
-        content:"";
-        position:absolute;
-        inset:-6px;
-        border-radius: 26px;
-        background: radial-gradient(closest-side, rgba(124,92,255,.30), rgba(0,0,0,0));
-        opacity:.10;
-        pointer-events:none;
-      }
-      @keyframes svHotSpin{ from{ transform: rotate(0deg);} to{ transform: rotate(360deg);} }
-      @keyframes svHotPulse{
-        0%, 15%{ opacity:.0; }
-        30%, 70%{ opacity:.92; }
-        100%{ opacity:.0; }
-      }
-      @keyframes svHotColor{
-        0%{ --svHot: rgba(0,212,255,.95); }
-        25%{ --svHot: rgba(168,85,247,.95); }
-        50%{ --svHot: rgba(34,211,238,.95); }
-        75%{ --svHot: rgba(244,114,182,.95); }
-        100%{ --svHot: rgba(0,212,255,.95); }
-      }
-
-      /* NEW popup (design-hoz illő, CSS fájl nélkül) */
-      .sv-new-backdrop{
-        position:fixed; inset:0;
-        background: rgba(0,0,0,.55);
-        backdrop-filter: blur(10px);
-        display:flex; align-items:center; justify-content:center;
-        z-index: 9999;
-      }
-      .sv-new-modal{
-        width:min(920px, calc(100% - 26px));
-        border-radius: 22px;
-        border: 1px solid rgba(255,255,255,.10);
-        background: rgba(11,15,23,.82);
-        box-shadow: 0 24px 80px rgba(0,0,0,.55);
-        overflow:hidden;
-      }
-      .sv-new-top{
-        display:flex; align-items:center; justify-content:space-between;
-        padding: 14px 16px;
-        border-bottom: 1px solid rgba(255,255,255,.07);
-      }
-      .sv-new-top .ttl{ font-weight: 900; letter-spacing:.2px; }
-      .sv-new-viewport{ position:relative; overflow:hidden; }
-      .sv-new-track{
-        display:flex;
-        will-change: transform;
-        transition: transform 520ms cubic-bezier(.2,.9,.2,1);
-      }
-      .sv-new-slide{
-        flex:0 0 100%;
-        display:grid;
-        grid-template-columns: 1.05fr .95fr;
-        gap: 14px;
-        padding: 14px;
-      }
-      @media (max-width: 820px){
-        .sv-new-slide{ grid-template-columns: 1fr; }
-      }
-      .sv-new-img{
-        border-radius: 18px;
-        border: 1px solid rgba(255,255,255,.10);
-        background: rgba(255,255,255,.03);
-        overflow:hidden;
-        aspect-ratio: 1/1;
-      }
-      .sv-new-img img{ width:100%; height:100%; object-fit:cover; display:block; }
-      .sv-new-info{
-        display:flex; flex-direction:column; gap:10px; justify-content:center;
-        padding: 6px 6px 6px 2px;
-      }
-      .sv-new-name{ font-weight: 950; font-size: 22px; line-height:1.15; }
-      .sv-new-flavor{ opacity:.96; font-size: 16.5px; }
-      .sv-new-price{ font-weight: 900; font-size: 18px; }
-      .sv-new-actions{
-        display:flex; gap:10px; align-items:center; justify-content:space-between;
-        padding: 12px 16px;
-        border-top: 1px solid rgba(255,255,255,.07);
-      }
-      .sv-new-actions label{
-        display:flex; gap:8px; align-items:center;
-        opacity:.9; font-size: 13.5px;
-        user-select:none;
-      }
-      .sv-new-actions button{
-        border-radius: 14px;
-        border: 1px solid rgba(255,255,255,.12);
-        background: rgba(255,255,255,.06);
-        color: inherit;
-        padding: 10px 12px;
-        cursor: pointer;
-        font-weight: 800;
-      }
-      .sv-new-actions button:hover{ background: rgba(255,255,255,.09); }
-      .sv-new-dots{
-        display:flex; gap:6px; align-items:center; justify-content:center;
-        padding: 10px 0 0 0;
-      }
-      .sv-new-dot{
-        width: 7px; height: 7px; border-radius: 99px;
-        background: rgba(255,255,255,.22);
-      }
-      .sv-new-dot.on{ background: rgba(255,255,255,.66); }
-      `;
-    document.head.appendChild(style);
+  function isSoon(p) {
+    return ((p && p.status) || "ok") === "soon";
   }
 
   /* ----------------- Source resolving (RAW preferált, custom domainen is) ----------------- */
@@ -266,7 +133,6 @@
       }
     } catch {}
 
-    // 2) stabil fájl: data/sv_source.json (admin írja)
     try {
       const r = await fetch(`data/sv_source.json?_=${Date.now()}`, { cache: "no-store" });
       if (r.ok) {
@@ -298,13 +164,14 @@
         }
       } catch {}
     }
+
     return null;
   }
 
-  async function fetchJsonFile(path, { forceBust = false } = {}) {
+  async function fetchJson(relPath, { forceBust=false } = {}){
     const src = await resolveSource();
-    const relBase = `data/${path}`;
-    const rawBase = src ? `https://raw.githubusercontent.com/${src.owner}/${src.repo}/${src.branch}/data/${path}` : null;
+    const relBase = relPath;
+    const rawBase = src ? `https://raw.githubusercontent.com/${src.owner}/${src.repo}/${src.branch}/${relPath}` : null;
 
     const mkUrl = (base) => forceBust ? `${base}${base.includes("?") ? "&" : "?"}_=${Date.now()}` : base;
 
@@ -315,7 +182,9 @@
 
     if (rawBase) {
       try {
-        const r = await fetch(mkUrl(rawBase), { cache: "no-store", headers });
+        const url = mkUrl(rawBase);
+        const r = await fetch(url, { cache: "no-store", headers });
+        if (r.status === 304) return null;
         if (r.ok) return await r.json();
         try { localStorage.removeItem("sv_source"); } catch {}
         source = null;
@@ -325,21 +194,31 @@
       }
     }
 
-    const r = await fetch(mkUrl(relBase), { cache: "no-store", headers });
-    if (!r.ok) throw new Error(`Nem tudtam betölteni: ${path} (${r.status})`);
+    const url = mkUrl(relBase);
+    const r = await fetch(url, { cache: "no-store", headers });
+    if (r.status === 304) return null;
+    if (!r.ok) throw new Error(`Nem tudtam betölteni: ${relPath} (${r.status})`);
     return await r.json();
   }
 
-  function normalizeDoc(data) {
-    if (Array.isArray(data)) return { categories: [], products: data };
-    const categories = data && Array.isArray(data.categories) ? data.categories : [];
-    const products = data && Array.isArray(data.products) ? data.products : [];
-    return { categories, products };
+  async function fetchProducts({ forceBust=false } = {}){
+    return await fetchJson("data/products.json", { forceBust });
+  }
+  async function fetchSales({ forceBust=false } = {}){
+    return await fetchJson("data/sales.json", { forceBust });
   }
 
-  function normalizeSales(raw) {
-    const arr = Array.isArray(raw) ? raw : [];
-    return arr.map(s => {
+  function normalizeDoc(data) {
+    if (Array.isArray(data)) return { categories: [], products: data, popups: [] };
+    const categories = data && Array.isArray(data.categories) ? data.categories : [];
+    const products = data && Array.isArray(data.products) ? data.products : [];
+    const popups = data && Array.isArray(data.popups) ? data.popups : [];
+    return { categories, products, popups };
+  }
+
+  function normalizeSales(data){
+    if(!Array.isArray(data)) return [];
+    return data.map(s => {
       const legacyPid = s.productId || s.pid || s.product || "";
       const legacyQty = s.qty || s.quantity || 1;
       const legacyPrice = s.unitPrice || s.price || s.amount || 0;
@@ -358,7 +237,7 @@
 
       return {
         id: String(s.id || ""),
-        date: String(s.date || s.day || s.createdAt || "").split("T")[0].split(" ")[0],
+        date: String(s.date || s.day || s.createdAt || ""),
         name: s.name || "",
         payment: s.payment || s.method || "",
         items
@@ -366,54 +245,55 @@
     }).filter(s => s.id);
   }
 
-  /* ----------------- HOT per category ----------------- */
-  function computeSoldMap() {
-    const m = new Map();
-    for (const s of state.sales || []) {
-      for (const it of (s.items || [])) {
+  /* ----------------- Featured (Felkapott) ----------------- */
+  function computeFeaturedByCategory(){
+    state.featuredByCat = new Map();
+    const products = (state.productsDoc.products || []).filter(p => p && p.id && p.visible !== false);
+    const cats = (state.productsDoc.categories || []);
+    const enabledCats = new Set(cats.filter(c => c && c.id && (c.featuredEnabled === false ? false : true)).map(c => String(c.id)));
+
+    // totals: categoryId -> productId -> qty
+    const totals = new Map();
+    let any = 0;
+
+    for(const sale of (state.sales || [])){
+      for(const it of (sale.items || [])){
         const pid = String(it.productId || "");
-        if (!pid) continue;
-        const q = Number(it.qty || 0);
-        if (!Number.isFinite(q) || q <= 0) continue;
-        m.set(pid, (m.get(pid) || 0) + q);
+        const qty = Number(it.qty || 0) || 0;
+        if(!pid || qty <= 0) continue;
+        const p = products.find(x => String(x.id) === pid);
+        if(!p) continue;
+        const cid = String(p.categoryId || "");
+        if(!cid || !enabledCats.has(cid)) continue;
+        any += qty;
+        if(!totals.has(cid)) totals.set(cid, new Map());
+        const m = totals.get(cid);
+        m.set(pid, (m.get(pid)||0) + qty);
       }
     }
-    return m;
-  }
 
-  function computeHotByCategory() {
-    const sold = computeSoldMap();
-    const locale = localeForLang();
-    const hot = new Map(); // categoryId -> productId
+    if(any <= 0) return; // ✅ nincs eladás → nincs felkapott
 
-    const cats = (state.productsDoc.categories || []).map(c => String(c.id));
-    for (const cid of cats) {
-      const candidates = (state.productsDoc.products || [])
-        .filter(p => p && String(p.categoryId || "") === cid)
-        .filter(p => p.visible !== false);
+    for(const [cid, m] of totals.entries()){
+      let bestPid = null;
+      let bestQty = -1;
 
-      if (!candidates.length) continue;
-
-      let max = -1;
-      for (const p of candidates) {
-        const v = sold.get(String(p.id)) || 0;
-        if (v > max) max = v;
+      for(const [pid, qty] of m.entries()){
+        if(qty > bestQty){
+          bestQty = qty; bestPid = pid;
+        }else if(qty === bestQty && bestPid){
+          // tie-break: íz név abc szerint (HU/EN locale)
+          const a = products.find(x=>String(x.id)===pid);
+          const b = products.find(x=>String(x.id)===bestPid);
+          const fa = norm(getFlavor(a));
+          const fb = norm(getFlavor(b));
+          const cmp = fa.localeCompare(fb, locale());
+          if(cmp < 0) bestPid = pid;
+        }
       }
-      const tied = candidates.filter(p => (sold.get(String(p.id)) || 0) === max);
 
-      tied.sort((a, b) => {
-        const fa = (state.lang === "en" ? (a.flavor_en || a.flavor_hu || "") : (a.flavor_hu || a.flavor_en || "")) || "";
-        const fb = (state.lang === "en" ? (b.flavor_en || b.flavor_hu || "") : (b.flavor_hu || b.flavor_en || "")) || "";
-        const c1 = fa.localeCompare(fb, locale, { sensitivity: "base" });
-        if (c1) return c1;
-        const c2 = getName(a).localeCompare(getName(b), "hu", { sensitivity: "base" });
-        if (c2) return c2;
-        return String(a.id).localeCompare(String(b.id), "en");
-      });
-
-      hot.set(cid, String(tied[0].id));
+      if(bestPid) state.featuredByCat.set(cid, bestPid);
     }
-    return hot;
   }
 
   /* ----------------- Rendering ----------------- */
@@ -425,8 +305,9 @@
         label_hu: c.label_hu || c.id,
         label_en: c.label_en || c.label_hu || c.id,
         basePrice: Number(c.basePrice || 0),
+        featuredEnabled: (c.featuredEnabled === false) ? false : true
       }))
-      .sort((a, b) => catLabel(a).localeCompare(catLabel(b), "hu"));
+      .sort((a, b) => catLabel(a).localeCompare(catLabel(b), locale()));
 
     return [
       { id: "all", label_hu: t("all"), label_en: t("all"), virtual: true },
@@ -437,7 +318,6 @@
 
   function filterList() {
     const q = norm(state.search);
-    const hotByCat = computeHotByCategory();
 
     let list = (state.productsDoc.products || []).map((p) => ({
       ...p,
@@ -445,47 +325,23 @@
       categoryId: String(p.categoryId || ""),
       status: p.status === "soon" || p.status === "out" || p.status === "ok" ? p.status : "ok",
       stock: Math.max(0, Number(p.stock || 0)),
-      visible: p.visible !== false,
-      isNew: !!p.isNew,
-    })).filter(p => p.id);
-
-    // csak láthatók
-    list = list.filter(p => p.visible);
+      visible: (p.visible === false) ? false : true
+    })).filter(p => p.id && p.visible !== false);
 
     if (state.active === "soon") {
       list = list.filter((p) => p.status === "soon");
     } else {
-      if (state.active !== "all") {
-        list = list.filter((p) => String(p.categoryId) === String(state.active));
-      }
-      // soon itt is látszik
+      if (state.active !== "all") list = list.filter((p) => String(p.categoryId) === String(state.active));
     }
 
     if (q) {
       list = list.filter((p) => norm(getName(p) + " " + getFlavor(p)).includes(q));
     }
 
-    // hot kiemelés: active kategória alatt 1 db, all alatt kategóriánként 1 db (mind elöl)
-    const hotIds = new Set();
-    if (state.active === "all") {
-      for (const [cid, pid] of hotByCat.entries()) {
-        hotIds.add(pid);
-      }
-    } else if (state.active !== "soon") {
-      const pid = hotByCat.get(String(state.active));
-      if (pid) hotIds.add(pid);
-    }
-
-    const hotItems = [];
-    const rest = [];
-    for (const p of list) {
-      if (hotIds.has(String(p.id))) hotItems.push(p);
-      else rest.push(p);
-    }
-
-    const okPart = rest.filter((p) => p.status === "ok" && !isOut(p));
-    const soonPart = rest.filter((p) => p.status === "soon"); // soon mindig a végén, de out előtt
-    const outPart = rest.filter((p) => isOut(p));
+    // ✅ order: ok ... then soon ... then out
+    const okPart = list.filter((p) => !isOut(p) && !isSoon(p));
+    const soonPart = list.filter((p) => !isOut(p) && isSoon(p));
+    const outPart = list.filter((p) => isOut(p));
 
     const groupSort = (arr) => {
       const map = new Map();
@@ -494,23 +350,17 @@
         if (!map.has(key)) map.set(key, []);
         map.get(key).push(p);
       }
-      const keys = [...map.keys()].sort((a, b) => a.localeCompare(b, "hu"));
+      const keys = [...map.keys()].sort((a, b) => a.localeCompare(b, locale()));
       const out = [];
       for (const k of keys) {
         const items = map.get(k);
-        items.sort((a, b) => norm(getFlavor(a)).localeCompare(norm(getFlavor(b)), localeForLang(), { sensitivity: "base" }));
+        items.sort((a, b) => norm(getFlavor(a)).localeCompare(norm(getFlavor(b)), locale()));
         out.push(...items);
       }
       return out;
     };
 
-    // all tabon: több hot van -> kategória sorrend szerint rakjuk előre
-    if (state.active === "all" && hotItems.length > 1) {
-      const order = orderedCategories().map(c => c.id);
-      hotItems.sort((a,b) => order.indexOf(String(a.categoryId)) - order.indexOf(String(b.categoryId)));
-    }
-
-    return [...hotItems, ...groupSort(okPart), ...groupSort(soonPart), ...groupSort(outPart)];
+    return [...groupSort(okPart), ...groupSort(soonPart), ...groupSort(outPart)];
   }
 
   function fmtFt(n) {
@@ -537,36 +387,66 @@
     }
   }
 
-  function renderGrid() {
-    ensureInjectedStyles();
+  function getFeaturedListForAll(){
+    const cats = (state.productsDoc.categories || []).filter(c => c && c.id && (c.featuredEnabled === false ? false : true));
+    cats.sort((a,b)=>catLabel(a).localeCompare(catLabel(b), locale()));
+    const out = [];
+    for(const c of cats){
+      const pid = state.featuredByCat.get(String(c.id));
+      if(!pid) continue;
+      const p = (state.productsDoc.products||[]).find(x=>String(x.id)===String(pid));
+      if(p && p.visible !== false) out.push(p);
+    }
+    return out;
+  }
 
+  function renderGrid() {
     const grid = $("#grid");
     const empty = $("#empty");
     grid.innerHTML = "";
 
-    const list = filterList();
+    let list = filterList();
+
+    // ✅ Featured: kategóriánként 1-1 (ha van eladás) + kategória toggle (admin)
+    const featuredIds = new Set();
+    let featuredToPrepend = [];
+
+    if(state.active !== "soon"){
+      if(state.active === "all"){
+        featuredToPrepend = getFeaturedListForAll();
+      }else{
+        const pid = state.featuredByCat.get(String(state.active));
+        if(pid){
+          const p = (state.productsDoc.products||[]).find(x=>String(x.id)===String(pid));
+          if(p && p.visible !== false) featuredToPrepend = [p];
+        }
+      }
+    }
+
+    for(const fp of featuredToPrepend){
+      featuredIds.add(String(fp.id));
+    }
+
+    if(featuredToPrepend.length){
+      // remove from main list so ne duplázzon
+      list = list.filter(p => !featuredIds.has(String(p.id)));
+      list = [...featuredToPrepend, ...list];
+    }
+
     $("#count").textContent = String(list.length);
     empty.style.display = list.length ? "none" : "block";
-
-    // hot set a badge-hez
-    const hotByCat = computeHotByCategory();
-    const hotSet = new Set();
-    if (state.active === "all") for (const v of hotByCat.values()) hotSet.add(String(v));
-    else if (state.active !== "soon") {
-      const v = hotByCat.get(String(state.active));
-      if (v) hotSet.add(String(v));
-    }
 
     for (const p of list) {
       const name = getName(p);
       const flavor = getFlavor(p);
       const out = isOut(p);
+      const soon = isSoon(p);
+      const featured = featuredIds.has(String(p.id));
+      const stockShown = out ? 0 : (soon ? Math.max(0, Number(p.stock || 0)) : Math.max(0, Number(p.stock || 0)));
       const price = effectivePrice(p);
 
-      const isHot = hotSet.has(String(p.id));
-
       const card = document.createElement("div");
-      card.className = "card fade-in" + (out ? " dim" : "") + (isHot ? " sv-hot" : "");
+      card.className = "card fade-in" + (out ? " dim" : "") + (soon ? " soon" : "") + (featured ? " featured" : "");
 
       const hero = document.createElement("div");
       hero.className = "hero";
@@ -576,59 +456,45 @@
       img.alt = (name + (flavor ? " - " + flavor : "")).trim();
       img.src = p.image || "";
 
-      // státusz alapú szürkeség (CSS nélkül)
+      // sold-out legyen szürke (CSS is)
       if (out) {
-        img.style.filter = "grayscale(1) brightness(0.20) contrast(0.92)";
-      } else if (p.status === "soon") {
-        // kevésbé szürke, mint eddig
-        img.style.filter = "grayscale(0.55) brightness(0.92) contrast(1.02)";
+        img.style.filter = "grayscale(.75) contrast(.95) brightness(.85)";
       }
-      hero.appendChild(img);
 
       const badges = document.createElement("div");
       badges.className = "badges";
 
-      if (isHot) {
+      if(featured){
         const b = document.createElement("div");
-        b.className = "badge";
-        b.style.background = "rgba(255,255,255,.10)";
-        b.style.border = "1px solid rgba(255,255,255,.18)";
-        b.style.backdropFilter = "blur(10px)";
-        b.style.fontWeight = "900";
-        b.textContent = "🔥 " + t("hot");
+        b.className = "badge hot";
+        b.textContent = t("hot");
         badges.appendChild(b);
       }
 
-      if (p.status === "soon") {
+      if (soon) {
         const b = document.createElement("div");
         b.className = "badge soon";
         b.textContent = t("soon");
         badges.appendChild(b);
-      } else if (out) {
+      }
+
+      if (out) {
         const b = document.createElement("div");
         b.className = "badge out";
         b.textContent = t("out");
         badges.appendChild(b);
       }
+
+      const overlay = document.createElement("div");
+      overlay.className = "overlay-title";
+      overlay.innerHTML = `
+        <div class="name">${name}</div>
+        <div class="flavor">${flavor}</div>
+      `;
+
+      hero.appendChild(img);
       hero.appendChild(badges);
-
-      const ov = document.createElement("div");
-      ov.className = "overlay-title";
-
-      const n = document.createElement("div");
-      n.className = "name";
-      n.textContent = name || "—";
-
-      const f = document.createElement("div");
-      f.className = "flavor";
-      f.textContent = flavor || "";
-      f.style.fontSize = "16.5px";
-      f.style.opacity = "0.98";
-      f.style.letterSpacing = "0.2px";
-
-      ov.appendChild(n);
-      ov.appendChild(f);
-      hero.appendChild(ov);
+      hero.appendChild(overlay);
 
       const body = document.createElement("div");
       body.className = "card-body";
@@ -642,18 +508,7 @@
 
       const stockEl = document.createElement("div");
       stockEl.className = "stock";
-      const stockShown = out ? 0 : Math.max(0, Number(p.stock || 0));
-      stockEl.innerHTML =
-        p.status === "soon"
-          ? `${t("stock")}: <b>—</b>`
-          : `${t("stock")}: <b>${stockShown}</b> ${t("pcs")}`;
-      stockEl.style.fontSize = "14.5px";
-      stockEl.style.opacity = "0.98";
-      const sb = stockEl.querySelector("b");
-      if (sb) {
-        sb.style.fontSize = "15.5px";
-        sb.style.opacity = "1";
-      }
+      stockEl.innerHTML = `${t("stock")}: <b>${soon ? "—" : stockShown} ${soon ? "" : t("pcs")}</b>`;
 
       meta.appendChild(priceEl);
       meta.appendChild(stockEl);
@@ -661,274 +516,351 @@
 
       card.appendChild(hero);
       card.appendChild(body);
+
       grid.appendChild(card);
     }
   }
 
-  /* ----------------- NEW popup ----------------- */
-  let popupShownSig = "";
+  /* ----------------- Popups (New products) ----------------- */
+  function popupHideKey(pp){
+    const id = String(pp.id||"");
+    const rev = Number(pp.rev || pp.updatedAt || pp.createdAt || 0) || 0;
+    return `sv_popup_hide_${id}_${rev}`;
+  }
 
-  function getDismissedNewIds() {
-    try {
-      const arr = JSON.parse(localStorage.getItem("sv_new_dismissed") || "[]");
-      return new Set(Array.isArray(arr) ? arr.map(String) : []);
-    } catch {
-      return new Set();
+  function buildPopupQueue(){
+    const popups = (state.productsDoc.popups || []).filter(pp => pp && pp.id && (pp.enabled === false ? false : true));
+    // sort: newest first (admin list is newest first)
+    popups.sort((a,b)=>(Number(b.createdAt||0)-Number(a.createdAt||0)));
+
+    const products = (state.productsDoc.products || []).filter(p=>p && p.id && p.visible !== false);
+    const cats = (state.productsDoc.categories || []);
+
+    const queue = [];
+
+    for(const pp of popups){
+      // skip if user hid this rev
+      try{
+        if(localStorage.getItem(popupHideKey(pp)) === "1") continue;
+      }catch{}
+
+      // collect product ids
+      const ids = new Set();
+      for(const cid of (pp.categoryIds||[])){
+        for(const p of products){
+          if(String(p.categoryId) === String(cid)) ids.add(String(p.id));
+        }
+      }
+      for(const pid of (pp.productIds||[])){
+        ids.add(String(pid));
+      }
+
+      const picked = [...ids].map(id => products.find(p=>String(p.id)===String(id))).filter(Boolean);
+
+      // group by category
+      const byCat = new Map();
+      for(const p of picked){
+        const cid = String(p.categoryId||"");
+        if(!byCat.has(cid)) byCat.set(cid, []);
+        byCat.get(cid).push(p);
+      }
+
+      // sort categories by label
+      const catIds = [...byCat.keys()].sort((a,b)=>{
+        const ca = cats.find(x=>String(x.id)===String(a));
+        const cb = cats.find(x=>String(x.id)===String(b));
+        return catLabel(ca).localeCompare(catLabel(cb), locale());
+      });
+
+      if(!catIds.length) continue;
+
+      queue.push({
+        popup: pp,
+        categories: catIds.map(cid => ({
+          id: cid,
+          label: catLabel(cats.find(x=>String(x.id)===String(cid)) || {id:cid, label_hu:cid, label_en:cid}),
+          products: byCat.get(cid)
+            .slice()
+            .sort((a,b)=> norm(getFlavor(a)).localeCompare(norm(getFlavor(b)), locale()))
+        }))
+      });
     }
-  }
-  function setDismissedNewIds(set) {
-    try {
-      localStorage.setItem("sv_new_dismissed", JSON.stringify([...set]));
-    } catch {}
+
+    return queue;
   }
 
-  function maybeShowNewPopup() {
-    // csak ha van olyan "isNew", amit még nem dismisseltek
-    const dismissed = getDismissedNewIds();
-    const newItems = (state.productsDoc.products || [])
-      .filter(p => p && p.visible !== false)
-      .filter(p => !!p.isNew)
-      .map(p => ({
-        id: String(p.id || ""),
-        name: getName(p),
-        flavor: getFlavor(p),
-        price: effectivePrice(p),
-        image: p.image || ""
-      }))
-      .filter(p => p.id);
+  function showPopupsIfNeeded(){
+    const queue = buildPopupQueue();
+    if(!queue.length) return;
 
-    const pending = newItems.filter(p => !dismissed.has(p.id));
-    if (!pending.length) return;
+    // modal DOM
+    let bg = document.querySelector("#popupBg");
+    if(bg) bg.remove();
 
-    // ne spammeljünk: ugyanazt a listát csak egyszer mutassuk session-ben
-    const sig = pending.map(x => x.id).sort().join("|") + "|" + state.lang;
-    if (sig === popupShownSig) return;
-    popupShownSig = sig;
-
-    ensureInjectedStyles();
-
-    // backdrop
-    const bg = document.createElement("div");
-    bg.className = "sv-new-backdrop";
+    bg = document.createElement("div");
+    bg.id = "popupBg";
+    bg.className = "popup-backdrop";
 
     const modal = document.createElement("div");
-    modal.className = "sv-new-modal";
-
-    const top = document.createElement("div");
-    top.className = "sv-new-top";
-    top.innerHTML = `<div class="ttl">${t("newTitle")}</div><div style="opacity:.65;font-size:12.5px;">(${pending.length})</div>`;
-
-    const viewport = document.createElement("div");
-    viewport.className = "sv-new-viewport";
-
-    const track = document.createElement("div");
-    track.className = "sv-new-track";
-
-    const dots = document.createElement("div");
-    dots.className = "sv-new-dots";
-
-    pending.forEach((p, idx) => {
-      const slide = document.createElement("div");
-      slide.className = "sv-new-slide";
-      slide.innerHTML = `
-        <div class="sv-new-img"><img alt="" loading="eager" src="${p.image}"></div>
-        <div class="sv-new-info">
-          <div class="sv-new-name">${escapeHtml(p.name || "—")}</div>
-          <div class="sv-new-flavor">${escapeHtml(p.flavor || "")}</div>
-          <div class="sv-new-price">${escapeHtml(fmtFt(p.price))}</div>
-          <div class="small-muted" style="margin-top:6px;opacity:.75;">Új termékek elérhetőek ✨</div>
-        </div>
-      `;
-      track.appendChild(slide);
-
-      const d = document.createElement("div");
-      d.className = "sv-new-dot" + (idx === 0 ? " on" : "");
-      dots.appendChild(d);
-    });
-
-    viewport.appendChild(track);
-
-    const actions = document.createElement("div");
-    actions.className = "sv-new-actions";
-    actions.innerHTML = `
-      <label><input type="checkbox" id="svNewDont" /> ${t("newDont")}</label>
-      <button id="svNewOk">${t("newOk")}</button>
-    `;
-
-    modal.appendChild(top);
-    modal.appendChild(viewport);
-    modal.appendChild(dots);
-    modal.appendChild(actions);
+    modal.className = "popup-modal";
     bg.appendChild(modal);
+
     document.body.appendChild(bg);
 
-    const dont = actions.querySelector("#svNewDont");
-    const okBtn = actions.querySelector("#svNewOk");
+    let popupIndex = 0;
+    let catIndex = 0;
 
-    let idx = 0;
-    let timer = null;
+    let autoplayTimer = null;
 
-    const setIdx = (i) => {
-      idx = (i + pending.length) % pending.length;
-      track.style.transform = `translateX(-${idx * 100}%)`;
-      [...dots.children].forEach((x, j) => x.classList.toggle("on", j === idx));
+    const cleanupAutoplay = () => {
+      if(autoplayTimer) clearInterval(autoplayTimer);
+      autoplayTimer = null;
     };
 
-    const start = () => {
-      if (pending.length <= 1) return;
-      timer = setInterval(() => setIdx(idx + 1), 3200);
-    };
-    const stop = () => {
-      if (timer) clearInterval(timer);
-      timer = null;
-    };
-
-    bg.addEventListener("click", (e) => {
-      if (e.target === bg) {
-        // backdrop click: csak bezár, nem dismissel
-        stop();
-        bg.remove();
-      }
-    });
-
-    okBtn.onclick = () => {
-      if (dont && dont.checked) {
-        const s = getDismissedNewIds();
-        pending.forEach(p => s.add(p.id));
-        setDismissedNewIds(s);
-      }
-      stop();
+    const closeAll = () => {
+      cleanupAutoplay();
       bg.remove();
     };
 
-    // swipe (teló)
-    let sx = 0;
-    viewport.addEventListener("touchstart", (e) => { sx = e.touches?.[0]?.clientX || 0; stop(); }, { passive:true });
-    viewport.addEventListener("touchend", (e) => {
-      const ex = e.changedTouches?.[0]?.clientX || 0;
-      const dx = ex - sx;
-      if (Math.abs(dx) > 40) setIdx(idx + (dx < 0 ? 1 : -1));
-      start();
+    const render = () => {
+      cleanupAutoplay();
+
+      const cur = queue[popupIndex];
+      if(!cur){ closeAll(); return; }
+
+      const curCat = cur.categories[catIndex];
+      if(!curCat){
+        popupIndex += 1;
+        catIndex = 0;
+        render();
+        return;
+      }
+
+      const pp = cur.popup;
+
+      modal.innerHTML = "";
+
+      const top = document.createElement("div");
+      top.className = "popup-top";
+      top.innerHTML = `
+        <div class="popup-title">${(state.lang==="en" ? (pp.title_en || t("newAvail")) : (pp.title_hu || t("newAvail")))}</div>
+        <div class="popup-sub">${curCat.label}</div>
+      `;
+
+      const carousel = document.createElement("div");
+      carousel.className = "popup-carousel";
+
+      const track = document.createElement("div");
+      track.className = "popup-track";
+      carousel.appendChild(track);
+
+      const items = curCat.products || [];
+      let slide = 0;
+
+      const renderSlides = () => {
+        track.innerHTML = "";
+        for(const p of items){
+          const card = document.createElement("div");
+          card.className = "popup-item";
+
+          card.innerHTML = `
+            <div class="popup-img"><img loading="lazy" src="${p.image || ""}" alt="${(getName(p)+" "+getFlavor(p)).trim()}"></div>
+            <div class="popup-meta">
+              <div class="popup-name">${getName(p)}</div>
+              <div class="popup-flavor">${getFlavor(p)}</div>
+              <div class="popup-row">
+                <div class="popup-price">${fmtFt(effectivePrice(p))}</div>
+                <div class="popup-stock">${t("stock")}: <b>${isSoon(p) ? "—" : (isOut(p)?0:Math.max(0, Number(p.stock||0)))} ${isSoon(p)?"":t("pcs")}</b></div>
+              </div>
+            </div>
+          `;
+          track.appendChild(card);
+        }
+        goTo(slide, true);
+      };
+
+      const goTo = (idx, instant=false) => {
+        slide = (idx + items.length) % items.length;
+        track.style.transition = instant ? "none" : "";
+        track.style.transform = `translateX(${slide * -100}%)`;
+        if(instant){
+          requestAnimationFrame(()=>{ track.style.transition = ""; });
+        }
+      };
+
+      renderSlides();
+
+      if(items.length > 1){
+        autoplayTimer = setInterval(() => {
+          goTo(slide + 1, false);
+        }, 3200);
+      }
+
+      const nav = document.createElement("div");
+      nav.className = "popup-nav";
+
+      const prev = document.createElement("button");
+      prev.className = "ghost";
+      prev.textContent = "‹";
+      prev.onclick = () => goTo(slide - 1, false);
+
+      const next = document.createElement("button");
+      next.className = "ghost";
+      next.textContent = "›";
+      next.onclick = () => goTo(slide + 1, false);
+
+      const mid = document.createElement("div");
+      mid.className = "popup-dots";
+      mid.textContent = `${catIndex+1}/${cur.categories.length}`;
+
+      nav.appendChild(prev);
+      nav.appendChild(mid);
+      nav.appendChild(next);
+
+      const bottom = document.createElement("div");
+      bottom.className = "popup-bottom";
+
+      const dont = document.createElement("label");
+      dont.className = "chk";
+      dont.innerHTML = `<input type="checkbox" id="ppDont"> ${t("dontShow")}`;
+
+      const btnSkip = document.createElement("button");
+      btnSkip.className = "ghost";
+      btnSkip.textContent = t("skipAll");
+      btnSkip.onclick = () => {
+        // nem mentjük hide-ot → kövi betöltésnél újra feldobja
+        closeAll();
+      };
+
+      const btnOk = document.createElement("button");
+      btnOk.className = "primary";
+      btnOk.textContent = t("understood");
+      btnOk.onclick = () => {
+        const chk = modal.querySelector("#ppDont");
+        if(chk && chk.checked){
+          try{ localStorage.setItem(popupHideKey(pp), "1"); }catch{}
+        }
+        catIndex += 1;
+        render();
+      };
+
+      bottom.appendChild(dont);
+      bottom.appendChild(btnSkip);
+      bottom.appendChild(btnOk);
+
+      modal.appendChild(top);
+      modal.appendChild(carousel);
+      if(items.length > 1) modal.appendChild(nav);
+      modal.appendChild(bottom);
+    };
+
+    // click outside closes current popup stack? better: do nothing to avoid accidental
+    bg.addEventListener("click", (e) => {
+      if(e.target === bg){
+        // same as skip all (no hide)
+        closeAll();
+      }
     });
 
-    start();
+    render();
   }
 
-  function escapeHtml(s){
-    return String(s ?? "").replace(/[&<>"']/g, m => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;" }[m]));
+  /* ----------------- Init ----------------- */
+  function setLangUI(){
+    $("#langLabel").textContent = state.lang.toUpperCase();
+    $("#search").placeholder = state.lang === "en" ? "Search..." : "Keresés...";
   }
 
-  /* ----------------- Live updates ----------------- */
-  let lastSig = "";
+  function initLang(){
+    $("#langBtn").onclick = () => {
+      state.lang = state.lang === "hu" ? "en" : "hu";
+      localStorage.setItem("sv_lang", state.lang);
+      setLangUI();
+      renderNav();
+      renderGrid();
+      // popups szöveg is nyelv függő – újrarender
+      showPopupsIfNeeded();
+    };
+  }
 
-  function applyData(doc, sales) {
-    if (!doc) return;
-    const sig = JSON.stringify(doc) + "||" + JSON.stringify(sales || []);
-    if (sig && sig === lastSig) return;
-    lastSig = sig;
+  function hydrateFromLivePayload(){
+    try{
+      const raw = localStorage.getItem("sv_live_payload");
+      if(!raw) return false;
+      const payload = JSON.parse(raw);
+      if(!payload || !payload.doc) return false;
+      state.productsDoc = normalizeDoc(payload.doc);
+      state.sales = normalizeSales(payload.sales || []);
+      computeFeaturedByCategory();
+      return true;
+    }catch{ return false; }
+  }
 
-    state.productsDoc = doc;
-    if (Array.isArray(sales)) state.sales = sales;
-
-    renderNav();
-    renderGrid();
-
-    $("#loader").style.display = "none";
-    $("#app").style.display = "grid";
-
-    // popup: ha kell
-    try { maybeShowNewPopup(); } catch {}
+  async function loadAll({ forceBust=false } = {}){
+    const doc = await fetchProducts({ forceBust });
+    if(doc){
+      state.productsDoc = normalizeDoc(doc);
+    }else{
+      // no change
+    }
+    const sales = await fetchSales({ forceBust }).catch(()=>null);
+    if(sales){
+      state.sales = normalizeSales(sales);
+    }else if(!Array.isArray(state.sales)){
+      state.sales = [];
+    }
+    computeFeaturedByCategory();
   }
 
   async function init() {
     applySyncParams();
-    $("#langLabel").textContent = state.lang.toUpperCase();
-    $("#langBtn").onclick = () => {
-      state.lang = state.lang === "hu" ? "en" : "hu";
-      localStorage.setItem("sv_lang", state.lang);
-      $("#langLabel").textContent = state.lang.toUpperCase();
-      renderNav();
-      renderGrid();
-      // popup nyelv váltásnál ne erőltesd újra
+    setLangUI();
+    initLang();
+
+    // if admin pushed live payload (same browser) use it first
+    hydrateFromLivePayload();
+
+    // load from network (RAW) to be sure
+    await loadAll({ forceBust:true });
+
+    renderNav();
+    renderGrid();
+
+    // show app
+    $("#loader").style.display = "none";
+    $("#app").style.display = "grid";
+
+    // popups
+    showPopupsIfNeeded();
+
+    // live updates from admin (same browser)
+    try{
+      const bc = new BroadcastChannel("sv_live");
+      bc.onmessage = (e) => {
+        try{
+          if(!e.data) return;
+          if(e.data.doc) state.productsDoc = normalizeDoc(e.data.doc);
+          if(e.data.sales) state.sales = normalizeSales(e.data.sales);
+          computeFeaturedByCategory();
+          renderNav();
+          renderGrid();
+          showPopupsIfNeeded();
+        }catch{}
+      };
+    }catch{}
+
+    // polling (light)
+    const loop = async () => {
+      try{
+        await loadAll({ forceBust:false });
+        renderNav();
+        renderGrid();
+      }catch{}
+      setTimeout(loop, 25_000);
     };
 
-    $("#search").addEventListener("input", (e) => {
-      state.search = e.target.value || "";
-      renderGrid();
-    });
-
-    // ugyanazon böngészőben azonnali update admin mentésnél
-    try {
-      const cached = localStorage.getItem("sv_live_payload");
-      if (cached) {
-        const j = JSON.parse(cached);
-        if (j && j.doc) applyData(normalizeDoc(j.doc), normalizeSales(j.sales || []));
-      }
-    } catch {}
-
-    try {
-      const ch = new BroadcastChannel("sv_live");
-      ch.onmessage = (ev) => {
-        if (ev && ev.data && ev.data.doc) {
-          applyData(normalizeDoc(ev.data.doc), normalizeSales(ev.data.sales || []));
-        }
-      };
-    } catch {}
-
-    window.addEventListener("storage", (e) => {
-      if (e.key === "sv_live_payload" && e.newValue) {
-        try {
-          const j = JSON.parse(e.newValue);
-          if (j && j.doc) applyData(normalizeDoc(j.doc), normalizeSales(j.sales || []));
-        } catch {}
-      }
-    });
-
-    $("#loaderText").textContent = "Termékek betöltése…";
-
-    const rawP = await fetchJsonFile("products.json", { forceBust: true });
-    const rawS = await fetchJsonFile("sales.json", { forceBust: true }).catch(() => []);
-    applyData(normalizeDoc(rawP), normalizeSales(rawS));
-
-    // poll: products 2s aktív, sales 8s aktív; háttér 12s/30s
-    let tick = 0;
-
-    async function pollProducts(forceBust = false) {
-      try {
-        const data = await fetchJsonFile("products.json", { forceBust });
-        applyData(normalizeDoc(data), state.sales);
-      } catch {}
-    }
-
-    async function pollSales(forceBust = false) {
-      try {
-        const data = await fetchJsonFile("sales.json", { forceBust });
-        state.sales = normalizeSales(data);
-        // csak re-render (doc ugyanaz)
-        applyData(state.productsDoc, state.sales);
-      } catch {}
-    }
-
-    async function burst() {
-      for (let i = 0; i < 3; i++) {
-        await pollProducts(true);
-        await new Promise((r) => setTimeout(r, 280));
-      }
-      await pollSales(true);
-    }
-
-    async function loop() {
-      tick++;
-      const force = tick % 7 === 0; // kb 14s
-      await pollProducts(force);
-      if (tick % 4 === 0) await pollSales(force); // kb 8s
-
-      const next = document.hidden ? 12000 : 2000;
-      setTimeout(loop, next);
-    }
-
     document.addEventListener("visibilitychange", () => {
-      if (!document.hidden) burst();
+      if (!document.hidden) loadAll({ forceBust:true }).then(()=>{ renderNav(); renderGrid(); showPopupsIfNeeded(); }).catch(()=>{});
     });
 
     loop();
@@ -937,6 +869,6 @@
   init().catch((err) => {
     console.error(err);
     $("#loaderText").textContent =
-      "Betöltési hiba. (Nyisd meg a konzolt.) Ha telefonon vagy custom domainen vagy: nyisd meg egyszer a Sync linket az admin Beállításokból.";
+      "Betöltési hiba. (Nyisd meg a konzolt.) Ha telefonon vagy ...vagy: nyisd meg egyszer a Sync linket az admin Beállításokból.";
   });
 })();
