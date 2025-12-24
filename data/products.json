@@ -116,20 +116,6 @@
       ],
       "createdAt": 1766589019283,
       "updatedAt": 1766589019283
-    },
-    {
-      "id": "popup_a655555a142908_19b50e90be7",
-      "enabled": true,
-      "rev": 1766589014333,
-      "title_hu": "Új termékek elérhetőek",
-      "title_en": "New products available",
-      "categoryIds": [],
-      "productIds": [
-        "p_568389f50aa19_19b4d718932",
-        "p_cdf4d9a12f296_19b4e11ef4e"
-      ],
-      "createdAt": 1766589014333,
-      "updatedAt": 1766589014333
     }
   ]
 }
