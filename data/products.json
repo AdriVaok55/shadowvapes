@@ -67,6 +67,18 @@
       "name_en": "Elfbar Ice King 30k",
       "flavor_hu": "Red Bull",
       "flavor_en": "Elf Bull"
+    },
+    {
+      "id": "p_2ff9b502a78a2_19b4e18a6e7",
+      "categoryId": "elf30",
+      "status": "ok",
+      "stock": 3,
+      "price": null,
+      "image": "https://media.discordapp.net/attachments/1281700323081326743/1453206649123770480/Lime_cola_no_bg.png?ex=694c9ba8&is=694b4a28&hm=08623dad30f97a9c7fb0fb90a916a20060fee4f8881161be43a5345ec75f8f38&=&format=webp&quality=lossless&width=960&height=960",
+      "name_hu": "Elfbar Ice King 30k",
+      "name_en": "Elfbar Ice King 30k",
+      "flavor_hu": "Lime Kóla",
+      "flavor_en": "Lime Cola"
     }
   ]
 }
