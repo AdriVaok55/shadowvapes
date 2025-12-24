@@ -18,7 +18,9 @@
       "name_hu": "Elfbar Ice King 30k",
       "name_en": "Elfbar Ice King 30k",
       "flavor_hu": "Szőlő Jég",
-      "flavor_en": "Grape Ice"
+      "flavor_en": "Grape Ice",
+      "visible": true,
+      "isNew": false
     },
     {
       "id": "p_c9b37b233bdb5_19b4dbb80eb",
@@ -30,7 +32,9 @@
       "name_hu": "Elfbar Ice King 30k",
       "name_en": "Elfbar Ice King 30k",
       "flavor_hu": "Kék Málna",
-      "flavor_en": "Blue Razz"
+      "flavor_en": "Blue Razz",
+      "visible": false,
+      "isNew": false
     },
     {
       "id": "p_cdf4d9a12f296_19b4e11ef4e",
@@ -42,7 +46,9 @@
       "name_hu": "Elfbar Ice King 30k",
       "name_en": "Elfbar Ice King 30k",
       "flavor_hu": "Pink Limonádé",
-      "flavor_en": "Pink Limonade"
+      "flavor_en": "Pink Limonade",
+      "visible": true,
+      "isNew": false
     },
     {
       "id": "p_f93b7eb924ed1_19b4e156422",
@@ -54,7 +60,9 @@
       "name_hu": "Elfbar Ice King 30k",
       "name_en": "Elfbar Ice King 30k",
       "flavor_hu": "Miami Menta",
-      "flavor_en": "Miami Mint"
+      "flavor_en": "Miami Mint",
+      "visible": true,
+      "isNew": false
     },
     {
       "id": "p_bb90038d7199d8_19b4e1762ba",
@@ -66,7 +74,9 @@
       "name_hu": "Elfbar Ice King 30k",
       "name_en": "Elfbar Ice King 30k",
       "flavor_hu": "Red Bull",
-      "flavor_en": "Elf Bull"
+      "flavor_en": "Elf Bull",
+      "visible": true,
+      "isNew": false
     },
     {
       "id": "p_2ff9b502a78a2_19b4e18a6e7",
@@ -78,7 +88,9 @@
       "name_hu": "Elfbar Ice King 30k",
       "name_en": "Elfbar Ice King 30k",
       "flavor_hu": "Lime Kóla",
-      "flavor_en": "Lime Cola"
+      "flavor_en": "Lime Cola",
+      "visible": true,
+      "isNew": false
     }
   ]
 }
