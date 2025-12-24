@@ -42,23 +42,5 @@
         "unitPrice": 6000
       }
     ]
-  },
-  {
-    "id": "s_e0cbe5054894b8_19b4e0d9a11",
-    "date": "2025-12-24",
-    "name": "B. Zsolt",
-    "payment": "asd",
-    "items": [
-      {
-        "productId": "p_568389f50aa19_19b4d718932",
-        "qty": 10,
-        "unitPrice": 6000
-      },
-      {
-        "productId": "p_c9b37b233bdb5_19b4dbb80eb",
-        "qty": 4,
-        "unitPrice": 6000
-      }
-    ]
   }
 ]
