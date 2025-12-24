@@ -180,7 +180,8 @@
     const relBase = relPath;
     const rawBase = src ? `https://raw.githubusercontent.com/${src.owner}/${src.repo}/${src.branch}/${relPath}` : null;
 
-    const mkUrl = (base) => forceBust ? `${base}${base.includes("?") ? "&" : "?"}_=${Date.now()}` : base;
+    const tick = Math.floor(Date.now() / 9000);
+    const mkUrl = (base) => `${base}${base.includes("?") ? "&" : "?"}_=${forceBust ? Date.now() : tick}`;
 
     const headers = {
       "Cache-Control": "no-cache, no-store, must-revalidate",
@@ -594,6 +595,32 @@
       card.appendChild(hero);
       card.appendChild(body);
 
+      if(featured){
+        const svg = document.createElementNS("http://www.w3.org/2000/svg","svg");
+        svg.classList.add("feat-border");
+        svg.setAttribute("viewBox","0 0 100 100");
+        svg.setAttribute("preserveAspectRatio","none");
+
+        const mk = (cls) => {
+          const r = document.createElementNS("http://www.w3.org/2000/svg","rect");
+          r.setAttribute("x","2");
+          r.setAttribute("y","2");
+          r.setAttribute("width","96");
+          r.setAttribute("height","96");
+          r.setAttribute("rx","18");
+          r.setAttribute("ry","18");
+          r.setAttribute("class", cls);
+          return r;
+        };
+
+        svg.appendChild(mk("seg top cw"));
+        svg.appendChild(mk("seg top ccw"));
+        svg.appendChild(mk("seg bot cw"));
+        svg.appendChild(mk("seg bot ccw"));
+
+        card.appendChild(svg);
+      }
+
       grid.appendChild(card);
     }
   }
@@ -771,7 +798,8 @@
         render();
         return;
       }
-      let slide = 0;
+      let real = 0; // 0..len-1
+      let idx = 0;  // track index (clones miatt)
 
       const nav = document.createElement("div");
       nav.className = "popup-nav";
@@ -783,7 +811,7 @@
       const mid = document.createElement("div");
       mid.className = "popup-dots";
       function updateMid(){
-        mid.textContent = `${slide+1}/${items.length}`;
+        mid.textContent = `${real+1}/${items.length}`;
       }
 
       const next = document.createElement("button");
@@ -794,22 +822,49 @@
       nav.appendChild(mid);
       nav.appendChild(next);
 
-      const goTo = (idx, instant=false) => {
-        slide = (idx + items.length) % items.length;
+      const setPos = (instant=false) => {
         track.style.transition = instant ? "none" : "";
-        track.style.transform = `translate3d(${slide * -100}%,0,0)`;
-        updateMid();
+        track.style.transform = `translate3d(${idx * -100}%,0,0)`;
         if(instant){
           requestAnimationFrame(()=>{ track.style.transition = ""; });
         }
       };
 
-      prev.onclick = () => goTo(slide - 1, false);
-      next.onclick = () => goTo(slide + 1, false);
+      const goNext = () => {
+        if(items.length <= 1) return;
+        idx += 1;
+        real = (real + 1) % items.length;
+        setPos(false);
+        updateMid();
+      };
+
+      const goPrev = () => {
+        if(items.length <= 1) return;
+        idx -= 1;
+        real = (real - 1 + items.length) % items.length;
+        setPos(false);
+        updateMid();
+      };
+
+      prev.onclick = goPrev;
+      next.onclick = goNext;
 
       const renderSlides = () => {
         track.innerHTML = "";
-        for(const p of items){
+
+        const slides = [];
+        if(items.length <= 1){
+          slides.push(items[0]);
+          idx = 0;
+          real = 0;
+        }else{
+          // clone last + ...items + clone first (hogy balra "végtelenül" tudjon lapozni)
+          slides.push(items[items.length-1], ...items, items[0]);
+          idx = 1; // az első VALÓDI slide
+          real = 0;
+        }
+
+        for(const p of slides){
           const card = document.createElement("div");
           card.className = "popup-item";
 
@@ -826,38 +881,55 @@
           `;
           track.appendChild(card);
         }
-        goTo(slide, true);
+
+        setPos(true);
+        updateMid();
+
+        // wrap reset: utolsó->első ne "vissza" animáljon, hanem menjen tovább ugyanabba az irányba
+        track.addEventListener("transitionend", () => {
+          if(items.length <= 1) return;
+          if(idx === 0){
+            idx = items.length;
+            setPos(true);
+          }else if(idx === items.length + 1){
+            idx = 1;
+            setPos(true);
+          }
+        }, { once:false });
       };
 
       renderSlides();
 
       if(items.length > 1){
         autoplayTimer = setInterval(() => {
-          goTo(slide + 1, false);
+          goNext();
         }, 3200);
       }
-
-      const bottom = document.createElement("div");
+const bottom = document.createElement("div");
       bottom.className = "popup-bottom";
 
       const dont = document.createElement("label");
       dont.className = "chk";
       dont.innerHTML = `<input type="checkbox" id="ppDont"> ${t("dontShow")}`;
 
-      const btnSkip = document.createElement("button");
-      btnSkip.className = "ghost";
-      btnSkip.textContent = t("skipAll");
-      btnSkip.onclick = () => {
-        // ha be van pipálva a "Ne mutasd többször", akkor az ÖSSZES aktív popup-ot elrejtjük erre a rev-re
-        const chk = modal.querySelector("#ppDont");
-        if(chk && chk.checked){
-          for(const q of queue){
-            try{ localStorage.setItem(popupHideKey(q.popup), "1"); }catch{}
+      let btnSkip = null;
+      if(queue.length > 1){
+        btnSkip = document.createElement("button");
+        btnSkip.className = "ghost";
+        btnSkip.textContent = t("skipAll");
+        btnSkip.onclick = () => {
+          // ha be van pipálva a "Ne mutasd többször", akkor az ÖSSZES aktív popup-ot elrejtjük erre a rev-re
+          const chk = modal.querySelector("#ppDont");
+          if(chk && chk.checked){
+            for(const q of queue){
+              try{ localStorage.setItem(popupHideKey(q.popup), "1"); }catch{}
+            }
           }
-        }
-        closeAll();
-      };
+          closeAll();
+        };
+      }
 
+      
       const btnOk = document.createElement("button");
       btnOk.className = "primary";
       btnOk.textContent = t("understood");
@@ -871,7 +943,7 @@
       };
 
       bottom.appendChild(dont);
-      bottom.appendChild(btnSkip);
+      if(btnSkip) bottom.appendChild(btnSkip);
       bottom.appendChild(btnOk);
 
       modal.appendChild(top);
@@ -935,27 +1007,29 @@
   async function loadAll({ forceBust=false } = {}){
     let changed = false;
 
-    // products
-    const docRaw = await fetchProducts({ forceBust });
-    if(docRaw){
-      const docChanged = applyDocIfNewer(docRaw, { source: "net" });
+    // 📌 gyors frissítés telefonon is: sales-t agresszívan bustoljuk amikor látszik az oldal,
+    // mert a "felkapott" csak abból tud frissülni.
+    const salesBust = forceBust || !document.hidden;
+    const prodBust = forceBust;
+
+    const [docRes, salesRes] = await Promise.allSettled([
+      fetchProducts({ forceBust: prodBust }),
+      fetchSales({ forceBust: salesBust })
+    ]);
+
+    if(docRes.status === "fulfilled" && docRes.value){
+      const docChanged = applyDocIfNewer(docRes.value, { source: "net" });
       if(docChanged) changed = true;
     }
 
-    // sales
-    let salesOk = false;
-    try{
-      const salesRaw = await fetchSales({ forceBust });
-      salesOk = true;
-      // [] is truthy, so ok
-      const sChanged = applySalesIfChanged(normalizeSales(salesRaw || []), { fresh:true });
+    if(salesRes.status === "fulfilled"){
+      const sChanged = applySalesIfChanged(normalizeSales(salesRes.value || []), { fresh:true });
       if(sChanged) changed = true;
-    }catch{
+    }else{
       // ha nem tudjuk biztosan betölteni, ne jelenítsünk meg felkapottat
       state.salesFresh = false;
     }
 
-    // featured depends on BOTH products+sales; csak ha változott valami (vagy ha salesFresh változott)
     if(changed || !state.salesFresh){
       computeFeaturedByCategory();
     }
@@ -1019,7 +1093,7 @@
           showPopupsIfNeeded();
         }
       }catch{}
-      setTimeout(loop, 25_000);
+      setTimeout(loop, document.hidden ? 25_000 : 9_000);
     };
 
     document.addEventListener("visibilitychange", () => {

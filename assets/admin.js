@@ -1209,10 +1209,30 @@ function markDirty(flags){
 
         <div class="field full"><label>Kézi termékek (opcionális)</label>
           <input id="pp_search" placeholder="Keresés..." style="margin-bottom:10px;">
-          <div class="check-grid" id="pp_prod_list">
-            ${prods.map(p => `
-              <label class="chk"><input type="checkbox" class="pp_prod" value="${escapeHtml(p.id)}"${(pp.productIds||[]).includes(p.id)?" checked":""}> ${escapeHtml(p.name_hu||p.name_en||"—")} <span class="small-muted">• ${escapeHtml(p.flavor_hu||p.flavor_en||"")}</span></label>
-            `).join("")}
+          <div class="pick-grid" id="pp_prod_list">
+            ${prods.map(p => {
+              const checked = (pp.productIds||[]).includes(p.id);
+              const nm = escapeHtml(p.name_hu||p.name_en||"—");
+              const fl = escapeHtml(p.flavor_hu||p.flavor_en||"");
+              const img = escapeHtml(p.image||"");
+              const price = effectivePrice(p);
+              const priceTxt = `${Number(price||0).toLocaleString("hu-HU")} Ft`;
+              const st = (p.status==="soon") ? "—" : String(Math.max(0, Number(p.stock||0)));
+              return `
+                <label class="pick-card${checked ? " is-checked" : ""}">
+                  <input type="checkbox" class="pp_prod" value="${escapeHtml(p.id)}"${checked ? " checked" : ""}>
+                  <div class="pick-img">${img ? `<img loading="lazy" decoding="async" src="${img}" alt="">` : ""}</div>
+                  <div class="pick-info">
+                    <div class="pick-name">${nm}</div>
+                    <div class="pick-flavor">${fl}</div>
+                    <div class="pick-row">
+                      <div class="pick-price">${escapeHtml(priceTxt)}</div>
+                      <div class="pick-stock">Készlet: <b>${escapeHtml(st)}</b>${st==="—"?"":" db"}</div>
+                    </div>
+                  </div>
+                </label>
+              `;
+            }).join("")}
           </div>
         </div>
       </div>
@@ -1225,11 +1245,21 @@ function markDirty(flags){
       if(inp && list){
         inp.oninput = () => {
           const q = (inp.value||"").toLowerCase();
-          list.querySelectorAll("label.chk").forEach(lab => {
+          list.querySelectorAll("label.pick-card").forEach(lab => {
             const txt = (lab.textContent||"").toLowerCase();
             lab.style.display = (!q || txt.includes(q)) ? "" : "none";
           });
         };
+      }
+
+      // kiválasztott állapot vizuálisan
+      if(list){
+        list.querySelectorAll("input.pp_prod").forEach(ch => {
+          ch.addEventListener("change", () => {
+            const card = ch.closest(".pick-card");
+            if(card) card.classList.toggle("is-checked", ch.checked);
+          });
+        });
       }
     }, 0);
 
