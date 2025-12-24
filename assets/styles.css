@@ -463,134 +463,104 @@ button, input, select{
 }
 
 
-/* ---------------- FIX11: státusz keretek + felkapott animáció ---------------- */
-.card{ position:relative; }
+/* SV_FIX12_OVERRIDES */
 
-/* Hamarosan: halvány sárga keret + sárgás badge */
-.card.soon{
-  border-color: rgba(255, 213, 79, .22);
-}
-.card.soon:hover{
-  border-color: rgba(255, 213, 79, .40);
-}
-.badge.soon{
-  background: rgba(255, 213, 79, .16);
-  border-color: rgba(255, 213, 79, .35);
-}
-
-/* Elfogyott: piros körvonal */
-.card.dim{
-  border-color: rgba(255, 77, 109, .28);
-}
-.card.dim:hover{
-  border-color: rgba(255, 77, 109, .40);
-}
-
-/* Ízek legyenek jobban olvashatók */
+/* Kicsit láthatóbb ízek */
 .overlay-title .flavor{
-  color: rgba(232,238,252,.82);
+  color: rgba(255,255,255,.78);
 }
 
-/* Felkapott: fenti + lenti középről indul, jobbra-balra fut, majd körbe ér (színenként váltva) */
-.feat-border{
+/* Modal legyen görgethető (admin popup picker miatt) */
+.modal{
+  max-height: 86vh;
+  overflow: auto;
+}
+
+/* Státusz körvonalak + layerek */
+.card{ position: relative; }
+
+.card.out{
+  border-color: rgba(255,77,109,.88) !important;
+}
+.card.soon{
+  border-color: rgba(255,210,80,.92) !important;
+}
+.card.soon:not(.featured)::after{
+  content:"";
   position:absolute;
   inset:0;
-  width:100%;
-  height:100%;
+  border-radius: inherit;
+  background: rgba(255,210,80,.12);
   pointer-events:none;
-  z-index: 6;
-}
-.feat-border .seg{
-  fill:none;
-  stroke: rgba(40,215,255,.95);
-  stroke-width: 2.2;
-  stroke-linecap: round;
-  /* 100x100 viewBox perimeter ~ 400 → 1 szegmens 28 hossz */
-  stroke-dasharray: 28 372;
-  opacity:.95;
 }
 
-.feat-border .top.cw{  animation: featTopCW 2.8s linear infinite, featFade 2.8s linear infinite, featHue 11.2s steps(1,end) infinite; }
-.feat-border .top.ccw{ animation: featTopCCW 2.8s linear infinite, featFade 2.8s linear infinite, featHue 11.2s steps(1,end) infinite; }
-.feat-border .bot.cw{  animation: featBotCW 2.8s linear infinite, featFade 2.8s linear infinite, featHue 11.2s steps(1,end) infinite; }
-.feat-border .bot.ccw{ animation: featBotCCW 2.8s linear infinite, featFade 2.8s linear infinite, featHue 11.2s steps(1,end) infinite; }
-
-@keyframes featTopCW{  from{ stroke-dashoffset:-50; }  to{ stroke-dashoffset:-450; } }
-@keyframes featTopCCW{ from{ stroke-dashoffset:-50; }  to{ stroke-dashoffset:350; } }
-@keyframes featBotCW{  from{ stroke-dashoffset:-250; } to{ stroke-dashoffset:-650; } }
-@keyframes featBotCCW{ from{ stroke-dashoffset:-250; } to{ stroke-dashoffset:150; } }
-
-@keyframes featFade{
-  0%{ opacity:0; }
-  12%{ opacity:1; }
-  92%{ opacity:1; }
-  100%{ opacity:0; }
-}
-@keyframes featHue{
-  0%{ filter: hue-rotate(0deg) drop-shadow(0 0 10px rgba(40,215,255,.35)); }
-  25%{ filter: hue-rotate(80deg) drop-shadow(0 0 10px rgba(40,215,255,.35)); }
-  50%{ filter: hue-rotate(160deg) drop-shadow(0 0 10px rgba(40,215,255,.35)); }
-  75%{ filter: hue-rotate(240deg) drop-shadow(0 0 10px rgba(40,215,255,.35)); }
-  100%{ filter: hue-rotate(320deg) drop-shadow(0 0 10px rgba(40,215,255,.35)); }
+/* Felkapott badge */
+.badge.hot{
+  background: rgba(255,150,60,.18);
+  border-color: rgba(255,150,60,.45);
+  color: rgba(255,210,170,.98);
 }
 
-  25%{ filter: hue-rotate(80deg) drop-shadow(0 0 10px rgba(40,215,255,.35)); }
-  50%{ filter: hue-rotate(160deg) drop-shadow(0 0 10px rgba(40,215,255,.35)); }
-  75%{ filter: hue-rotate(240deg) drop-shadow(0 0 10px rgba(40,215,255,.35)); }
-  100%{ filter: hue-rotate(320deg) drop-shadow(0 0 10px rgba(40,215,255,.35)); }
+/* Hamarosan badge sárgás */
+.badge.soon{
+  background: rgba(255,210,80,.20);
+  border-color: rgba(255,210,80,.55);
+  color: rgba(255,235,190,.98);
 }
 
-/* Admin pop-up termék kiválasztó – nagy kártyák */
+/* Felkapott: narancs körvonal + körbefutó “csík” */
+.card.featured{
+  border-color: rgba(255,150,60,.95) !important;
+}
+.card.featured::before,
+.card.featured::after{
+  content:"";
+  position:absolute;
+  inset:-2px;
+  border-radius: inherit;
+  pointer-events:none;
+  padding:2px;
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  filter: drop-shadow(0 0 10px rgba(255,150,60,.35));
+}
+
+/* felső “csík” (balra indul / CCW) */
+.card.featured::before{
+  background: conic-gradient(from 0deg,
+    rgba(255,150,60,.98) 0 22deg,
+    transparent 22deg 360deg);
+  animation: svFeatTop 1.6s linear infinite;
+}
+
+/* alsó “csík” (jobbra indul / CW) */
+.card.featured::after{
+  background: conic-gradient(from 180deg,
+    rgba(255,150,60,.98) 0 22deg,
+    transparent 22deg 360deg);
+  animation: svFeatBot 1.6s linear infinite;
+}
+
+@keyframes svFeatTop{ to{ transform: rotate(-360deg); } }
+@keyframes svFeatBot{ to{ transform: rotate(360deg); } }
+}
+
+/* Admin popup picker */
 .pick-grid{
   display:grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 12px;
 }
 .pick-card{
-  position:relative;
-  display:flex;
-  gap: 12px;
-  align-items:center;
-  padding: 12px;
-  border-radius: 16px;
-  border: 1px solid rgba(255,255,255,.08);
-  background: rgba(11,15,23,.22);
   cursor:pointer;
-  transition: .16s;
-  user-select:none;
+  transform: translateZ(0);
 }
-.pick-card:hover{
-  transform: translateY(-1px);
-  border-color: rgba(124,92,255,.35);
-  background: rgba(11,15,23,.28);
+.pick-card.selected{
+  outline: 2px solid rgba(124,92,255,.65);
 }
-.pick-card.is-checked{
-  border-color: rgba(124,92,255,.55);
-  background: rgba(124,92,255,.10);
+.pick-selected .card{
+  max-width: 320px;
 }
-.pick-card input{
-  position:absolute;
-  top: 10px;
-  right: 10px;
-  transform: scale(1.15);
-}
-.pick-img{
-  width: 84px;
-  height: 84px;
-  border-radius: 16px;
-  overflow:hidden;
-  background: rgba(255,255,255,.06);
-  flex:0 0 auto;
-}
-.pick-img img{
-  width:100%;
-  height:100%;
-  object-fit:cover;
-  display:block;
-}
-.pick-info{ min-width:0; display:flex; flex-direction:column; gap:6px; }
-.pick-name{ font-weight:900; line-height:1.05; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.pick-flavor{ font-size:13px; opacity:.85; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.pick-row{ display:flex; align-items:baseline; justify-content:space-between; gap:10px; font-size:13px; opacity:.9; flex-wrap:wrap; }
-.pick-price{ font-weight:900; }
-.pick-stock b{ font-weight:900; }

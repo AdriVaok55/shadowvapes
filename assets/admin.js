@@ -9,7 +9,7 @@
   };
 
   const state = {
-    doc: { categories: [], products: [] },
+    doc: { categories: [], products: [], popups: [] },
     sales: [],
     loaded: false,
     saving: false,
@@ -19,8 +19,6 @@
     dirtySales: false,
     saveTimer: null,
     shas: { products: null, sales: null },
-    // hogy a public oldal biztosan megtalálja a RAW forrást (telefonon is)
-    forceSourceSync: false,
     clientId: (globalThis.crypto && crypto.randomUUID) ? crypto.randomUUID() : (Date.now().toString(36) + Math.random().toString(36).slice(2)),
     filters: {
       productsCat: "all",
@@ -83,21 +81,14 @@
     return !!(lock && lock.id && (Date.now() - Number(lock.ts || 0)) < 15000);
   }
   function acquireLock(){
-    try{
-      const cur = readLock();
-      if(lockValid(cur) && cur.id !== state.clientId) return false;
-      localStorage.setItem(LOCK_KEY, JSON.stringify({ id: state.clientId, ts: Date.now() }));
-      return true;
-    }catch{
-      // ha a localStorage valamiért tiltott/tele van, inkább mentsünk, mint hogy szétálljon az admin
-      return true;
-    }
+    const cur = readLock();
+    if(lockValid(cur) && cur.id !== state.clientId) return false;
+    localStorage.setItem(LOCK_KEY, JSON.stringify({ id: state.clientId, ts: Date.now() }));
+    return true;
   }
   function releaseLock(){
-    try{
-      const cur = readLock();
-      if(cur && cur.id === state.clientId) localStorage.removeItem(LOCK_KEY);
-    }catch{}
+    const cur = readLock();
+    if(cur && cur.id === state.clientId) localStorage.removeItem(LOCK_KEY);
   }
   // ha crash/bezárás: engedjük el
   window.addEventListener("beforeunload", releaseLock);
@@ -133,7 +124,6 @@
     if(!state.doc || typeof state.doc !== "object") state.doc = { categories: [], products: [] };
     if(!Array.isArray(state.doc.categories)) state.doc.categories = [];
     if(!Array.isArray(state.doc.products)) state.doc.products = [];
-    if(!Array.isArray(state.doc.popups)) state.doc.popups = [];
     if(!Array.isArray(state.sales)) state.sales = [];
 
     state.doc.categories = state.doc.categories
@@ -142,8 +132,8 @@
         id: String(c.id),
         label_hu: c.label_hu || c.id,
         label_en: c.label_en || c.label_hu || c.id,
-        basePrice: Number(c.basePrice || 0),
-        featuredEnabled: (c.featuredEnabled === false) ? false : true
+        featuredEnabled: (c.featuredEnabled === false) ? false : true,
+        basePrice: Number(c.basePrice || 0)
       }));
 
     state.doc.products = state.doc.products.map(p => ({
@@ -151,29 +141,40 @@
       categoryId: String(p.categoryId || ""),
       status: (p.status === "ok" || p.status === "out" || p.status === "soon") ? p.status : "ok",
       stock: Math.max(0, Number(p.stock || 0)),
-      visible: (p.visible === false) ? false : true,
       // price lehet null/üres => kategória alapár
       price: (p.price === "" || p.price === null || p.price === undefined) ? null : Number(p.price || 0),
       image: p.image || "",
+      visible: (p.visible === false) ? false : true,
       name_hu: p.name_hu || "",
       name_en: p.name_en || "",
       flavor_hu: p.flavor_hu || "",
       flavor_en: p.flavor_en || ""
     })).filter(p => p.id);
 
-    // Popups normalize
-    state.doc.popups = (state.doc.popups || []).map(pp => ({
-      id: String(pp.id || ""),
-      enabled: (pp.enabled === false) ? false : true,
-      // rev: ha változik, a "ne mutasd többször" újra feloldódik
-      rev: Number(pp.rev || pp.updatedAt || pp.createdAt || 0) || 0,
-      title_hu: pp.title_hu || "Új termékek elérhetőek",
-      title_en: pp.title_en || "New products available",
-      categoryIds: Array.isArray(pp.categoryIds) ? pp.categoryIds.map(x=>String(x)) : [],
-      productIds: Array.isArray(pp.productIds) ? pp.productIds.map(x=>String(x)) : [],
-      createdAt: Number(pp.createdAt || 0) || 0,
-      updatedAt: Number(pp.updatedAt || 0) || 0
-    })).filter(pp => pp.id);
+    // Popups normalize (külön fülön szerkeszthető)
+    if(!Array.isArray(state.doc.popups)) state.doc.popups = [];
+    state.doc.popups = state.doc.popups
+      .filter(x => x && (x.id || x.title_hu || x.title_en || x.title))
+      .map(x => {
+        const id = String(x.id || ("pu_" + Math.random().toString(16).slice(2) + "_" + Date.now().toString(16)));
+        const updatedAt = Number(x.updatedAt || x.rev || Date.now());
+        const createdAt = Number(x.createdAt || x.rev || updatedAt || Date.now());
+        const rev = Number(x.rev || updatedAt || Date.now());
+        const catIds = Array.isArray(x.categoryIds) ? x.categoryIds.map(v => String(v)) : [];
+        const prodIds = Array.isArray(x.productIds) ? x.productIds.map(v => String(v)) : [];
+        return {
+          id,
+          enabled: (x.enabled === false) ? false : true,
+          rev,
+          title_hu: String(x.title_hu || x.title || ""),
+          title_en: String(x.title_en || x.title_hu || x.title || ""),
+          categoryIds: catIds.filter(Boolean),
+          productIds: prodIds.filter(Boolean),
+          createdAt,
+          updatedAt
+        };
+      })
+      .filter(x => x.id);
 
     // Sales normalize (kompatibilis a régi formátummal is)
 state.sales = state.sales.map(s => {
@@ -246,22 +247,9 @@ state.sales = state.sales.map(s => {
     for(const br of branchesToTry){
       try{
         const p = await ShadowGH.getFile({ token: cfg.token, owner: cfg.owner, repo: cfg.repo, branch: br, path: "data/products.json" });
-        // sales.json lehet, hogy még nincs a repo-ban → ilyenkor induljunk üres eladásokkal
-        let s = null;
-        let sales = [];
-        try{
-          s = await ShadowGH.getFile({ token: cfg.token, owner: cfg.owner, repo: cfg.repo, branch: br, path: "data/sales.json" });
-          sales = JSON.parse(s.content || "[]");
-        }catch(e){
-          if(Number(e?.status || 0) === 404){
-            s = { sha: null };
-            sales = [];
-          }else{
-            throw e;
-          }
-        }
-
+        const s = await ShadowGH.getFile({ token: cfg.token, owner: cfg.owner, repo: cfg.repo, branch: br, path: "data/sales.json" });
         const doc = JSON.parse(p.content);
+        const sales = JSON.parse(s.content);
 
         cfg.branch = br;
         saveCfg(cfg);
@@ -269,10 +257,10 @@ state.sales = state.sales.map(s => {
         state.doc = doc;
         state.sales = sales;
         state.shas.products = p.sha;
-        state.shas.sales = s ? (s.sha || null) : null;
+        state.shas.sales = s.sha;
         normalizeDoc();
+    state.doc.updatedAt = Date.now();
         state.loaded = true;
-        state.forceSourceSync = true;
 
         return { ok:true };
       }catch(e){
@@ -337,26 +325,18 @@ state.sales = state.sales.map(s => {
 
     // biztos rend
     normalizeDoc();
+    state.doc.updatedAt = Date.now();
 
     for(const p of (state.doc.products||[])){
       if(p && p.status === "out") p.stock = 0;
       if(p && (!p.name_en || String(p.name_en).trim()==="")) p.name_en = p.name_hu || "";
     }
-    // _meta.rev: public old cache ne tudja felülírni a friss mentést
-    if(state.dirtyProducts){
-      state.doc._meta = {
-        ...(state.doc._meta || {}),
-        rev: Date.now(),
-        updatedAt: new Date().toISOString(),
-      };
-    }
-
     const productsText = JSON.stringify(state.doc, null, 2);
     const salesText = JSON.stringify(state.sales, null, 2);
 
     
 let ok = false;
-const wantProducts = !!state.dirtyProducts;
+const wantProducts = !!(state.dirtyProducts || state.dirtySales);
 const wantSales = !!state.dirtySales;
 
 try{
@@ -366,14 +346,8 @@ try{
     state.shas.products = pOld.sha;
   }
   if(wantSales && !state.shas.sales){
-    try{
-      const sOld = await ShadowGH.getFile({ token: cfg.token, owner: cfg.owner, repo: cfg.repo, branch: cfg.branch, path: "data/sales.json" });
-      state.shas.sales = sOld.sha;
-    }catch(e){
-      // ha még nem létezik, mentés sha nélkül fogja létrehozni
-      if(Number(e?.status || 0) === 404) state.shas.sales = null;
-      else throw e;
-    }
+    const sOld = await ShadowGH.getFile({ token: cfg.token, owner: cfg.owner, repo: cfg.repo, branch: cfg.branch, path: "data/sales.json" });
+    state.shas.sales = sOld.sha;
   }
 
   const tasks = [];
@@ -413,9 +387,8 @@ try{
     const srcObj = { owner: cfg.owner, repo: cfg.repo, branch: cfg.branch };
     const srcText = JSON.stringify(srcObj, null, 2);
     const prev = localStorage.getItem("sv_source_json") || "";
-    if(state.forceSourceSync || prev !== srcText){
-      state.forceSourceSync = false;
-      try{ localStorage.setItem("sv_source_json", srcText); }catch{}
+    if(prev !== srcText){
+      localStorage.setItem("sv_source_json", srcText);
       tasks.push(
         ShadowGH.putFileSafe({
           token: cfg.token, owner: cfg.owner, repo: cfg.repo, branch: cfg.branch,
@@ -484,15 +457,14 @@ function markDirty(flags){
     }
     if(state.saveTimer) clearTimeout(state.saveTimer);
     setSaveStatus("busy","Változás…");
-    // mobilon is stabilabb: ne lőjünk 0.3mp-enként mentést minden billentyűre
     state.saveTimer = setTimeout(() => {
       saveDataNow();
-    }, 650);
+    }, 320);
   }
 
   /* ---------- Rendering ---------- */
   function renderTabs(){
-    $("#tabs").onclick = (e) => {
+    $("#tabs").addEventListener("click", (e) => {
       const b = e.target.closest("button[data-tab]");
       if(!b) return;
       $("#tabs").querySelectorAll("button").forEach(x => x.classList.remove("active"));
@@ -508,7 +480,7 @@ function markDirty(flags){
 
       if(tab === "chart") drawChart();
       if(tab === "popups") renderPopups();
-    };
+    });
   }
 
   function renderSettings(){
@@ -581,7 +553,12 @@ function markDirty(flags){
         <td><input data-cid="${escapeHtml(c.id)}" data-k="label_hu" value="${escapeHtml(c.label_hu)}"></td>
         <td><input data-cid="${escapeHtml(c.id)}" data-k="label_en" value="${escapeHtml(c.label_en)}"></td>
         <td style="width:160px;"><input data-cid="${escapeHtml(c.id)}" data-k="basePrice" type="number" min="0" value="${Number(c.basePrice||0)}"></td>
-        <td style="width:120px;text-align:center;"><input type="checkbox" data-cid="${escapeHtml(c.id)}" data-k="featuredEnabled"${c.featuredEnabled===false?"":" checked"}></td>
+        <td style="width:140px;">
+          <label class="small-muted" style="display:flex;align-items:center;gap:8px;">
+            <input type="checkbox" data-cid="${escapeHtml(c.id)}" data-k="featuredEnabled" ${c.featuredEnabled!==false ? "checked":""}>
+            Felkapott
+          </label>
+        </td>
         <td style="width:110px;"><button class="danger" data-delcat="${escapeHtml(c.id)}">Töröl</button></td>
       </tr>
     `).join("");
@@ -589,7 +566,7 @@ function markDirty(flags){
     $("#panelCategories").innerHTML = `
       <div class="actions">
         <button class="primary" id="btnAddCat">+ Kategória</button>
-        <div class="small-muted">Ha terméknél az ár üres/null → kategória alap árát használja.</div>
+        <div class="small-muted">Ha terméknél az ár üres/null → kategória alap árát használja. A “Felkapott” kapcsoló: ha OFF, abban a kategóriában nem jelenik meg felkapott termék (ha nincs eladás, úgysem lesz).</div>
       </div>
       <table class="table">
         <thead>
@@ -607,9 +584,14 @@ function markDirty(flags){
           <div class="field third"><label>HU</label><input id="newChu" placeholder="ELF"></div>
           <div class="field third"><label>EN</label><input id="newCen" placeholder="ELF"></div>
           <div class="field third"><label>Alap ár</label><input id="newCprice" type="number" min="0" value="0"></div>
+          <div class="field full" style="display:flex;gap:10px;align-items:center;">
+            <label class="small-muted" style="display:flex;align-items:center;gap:8px;">
+              <input id="newCfeat" type="checkbox" checked> Felkapott engedélyezve ennél a kategóriánál
+            </label>
+          </div>
         </div>
       `;
-      openModal("Új kategória", "Nem prompt, rendes modal 😄", body, [
+      openModal("Új kategória", "", body, [
         { label:"Mégse", kind:"ghost", onClick: closeModal },
         { label:"Létrehozás", kind:"primary", onClick: () => {
           const id = ($("#newCid").value||"").trim();
@@ -619,7 +601,8 @@ function markDirty(flags){
             id,
             label_hu: ($("#newChu").value||"").trim() || id,
             label_en: ($("#newCen").value||"").trim() || ($("#newChu").value||"").trim() || id,
-            basePrice: Math.max(0, Number($("#newCprice").value||0))
+            basePrice: Math.max(0, Number($("#newCprice").value||0)),
+            featuredEnabled: !!$("#newCfeat").checked
           });
           closeModal();
           renderAll();
@@ -629,7 +612,7 @@ function markDirty(flags){
     };
 
     $("#panelCategories").querySelectorAll("input[data-cid]").forEach(inp => {
-      const apply = () => {
+      const handler = () => {
         const id = inp.dataset.cid;
         const k = inp.dataset.k;
         const c = catById(id);
@@ -639,9 +622,8 @@ function markDirty(flags){
         else c[k] = inp.value;
         markDirty({ products:true });
       };
-      // checkbox → change, a többi → input
-      if(inp.type === "checkbox") inp.onchange = apply;
-      else inp.oninput = apply;
+      inp.addEventListener("input", handler);
+      inp.addEventListener("change", handler);
     });
 
     $("#panelCategories").querySelectorAll("button[data-delcat]").forEach(btn => {
@@ -685,7 +667,11 @@ function markDirty(flags){
       return `
         <div class="rowline table">
           <div class="left">
-            <div style="font-weight:900;">${escapeHtml(p.name_hu||p.name_en||"—")} <span class="small-muted">• ${escapeHtml(p.flavor_hu||p.flavor_en||"")}</span></div>
+            <div style="font-weight:900;">
+              ${escapeHtml(p.name_hu||p.name_en||"—")}
+              <span class="small-muted">• ${escapeHtml(p.flavor_hu||p.flavor_en||"")}</span>
+              ${p.visible===false ? `<span class="badge out" style="margin-left:10px;">rejtve</span>` : ``}
+            </div>
             <div class="small-muted">
               Kategória: <b>${escapeHtml(c ? (c.label_hu||c.id) : "—")}</b>
               • Ár: <b>${eff.toLocaleString("hu-HU")} Ft</b>
@@ -693,7 +679,10 @@ function markDirty(flags){
             </div>
           </div>
           <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-            <label class="chk"><input type="checkbox" data-pid="${escapeHtml(p.id)}" data-k="visible"${p.visible===false?"":" checked"}> Látható</label>
+            <label class="small-muted" style="display:flex;align-items:center;gap:8px;">
+              <input type="checkbox" data-pid="${escapeHtml(p.id)}" data-k="visible" ${p.visible!==false ? "checked":""}>
+              Látható
+            </label>
             <select data-pid="${escapeHtml(p.id)}" data-k="categoryId">
               ${state.doc.categories.map(cc => `<option value="${escapeHtml(cc.id)}"${cc.id===p.categoryId?" selected":""}>${escapeHtml(cc.label_hu||cc.id)}</option>`).join("")}
             </select>
@@ -718,7 +707,7 @@ function markDirty(flags){
           ${cats.map(c => `<option value="${escapeHtml(c.id)}"${c.id===filterCat?" selected":""}>${escapeHtml(c.label)}</option>`).join("")}
         </select>
         <input id="prodSearch" placeholder="Keresés..." value="${escapeHtml(state.filters.productsSearch)}" style="flex:1;min-width:220px;">
-        <div class="small-muted">Out termékek a public oldalon automatikusan leghátul.</div>
+        <div class="small-muted">Rejtett termék nem jelenik meg a public oldalon. Out termék public oldalon leghátul.</div>
       </div>
       <div style="margin-top:10px;">${rows || `<div class="small-muted">Nincs találat.</div>`}</div>
     `;
@@ -729,32 +718,22 @@ function markDirty(flags){
     $("#btnAddProd").onclick = () => openProductModal(null);
 
     $("#panelProducts").querySelectorAll("[data-pid]").forEach(el => {
-      const apply = () => {
+      const handler = () => {
         const pid = el.dataset.pid;
         const k = el.dataset.k;
         const p = prodById(pid);
         if(!p) return;
 
-        if(k === "stock"){
-          p.stock = Math.max(0, Number(el.value||0));
-          if(p.stock <= 0 && p.status !== "soon") p.status = "out";
-        }else if(k === "price"){
-          p.price = (el.value === "" ? null : Math.max(0, Number(el.value||0)));
-        }else if(k === "status"){
-          p.status = el.value;
-          if(p.status === "out") p.stock = 0;
-        }else if(k === "categoryId"){
-          p.categoryId = el.value;
-        }else if(k === "visible"){
-          p.visible = !!el.checked;
-        }
+        if(k === "stock") p.stock = Math.max(0, Number(el.value||0));
+        else if(k === "price") p.price = (el.value === "" ? null : Math.max(0, Number(el.value||0)));
+        else if(k === "status") p.status = el.value;
+        else if(k === "categoryId") p.categoryId = el.value;
+        else if(k === "visible") p.visible = !!el.checked;
 
         markDirty({ products:true });
       };
-
-      const tag = String(el.tagName||"").toLowerCase();
-      if(tag === "select" || el.type === "checkbox") el.onchange = apply;
-      else el.oninput = apply;
+      el.addEventListener("input", handler);
+      el.addEventListener("change", handler);
     });
 
     $("#panelProducts").querySelectorAll("button[data-edit]").forEach(b => {
@@ -781,11 +760,11 @@ function markDirty(flags){
       stock: 0,
       price: null,
       image: "",
+      visible: true,
       name_hu: "",
       name_en: "",
       flavor_hu: "",
-      flavor_en: "",
-      visible: true
+      flavor_en: ""
     };
 
     const body = document.createElement("div");
@@ -805,18 +784,22 @@ function markDirty(flags){
           </select>
         </div>
 
-        <div class="field third"><label>Látható</label><label class="chk" style="justify-content:flex-start;"><input type="checkbox" id="p_visible" ${p.visible===false?"":"checked"}> Megjelenjen</label></div>
-
         <div class="field third"><label>Készlet</label><input id="p_stock" type="number" min="0" value="${p.stock}"></div>
         <div class="field third"><label>Ár (Ft) — üres: kategória ár</label><input id="p_price" type="number" min="0" value="${p.price===null?"":p.price}"></div>
         <div class="field full"><label>Kép URL</label><input id="p_img" value="${escapeHtml(p.image)}"></div>
+
+        <div class="field full" style="display:flex;gap:10px;align-items:center;">
+          <label class="small-muted" style="display:flex;align-items:center;gap:8px;">
+            <input id="p_visible" type="checkbox" ${p.visible!==false ? "checked":""}> Látható a public oldalon
+          </label>
+        </div>
 
         <div class="field third"><label>Termék neve</label><input id="p_name" value="${escapeHtml(p.name_hu)}"></div>
         <div class="field third"><label>Íz HU</label><input id="p_fhu" value="${escapeHtml(p.flavor_hu)}"></div>
         <div class="field third"><label>Íz EN</label><input id="p_fen" value="${escapeHtml(p.flavor_en)}"></div>
       </div>
       <div class="small-muted" style="margin-top:10px;">
-        soon → csak a “Hamarosan” tabban látszik. out/stock=0 → public oldalon leghátul + szürke.
+        Látható: ha OFF, a public oldalon nem jelenik meg. soon → public oldalon is megjelenhet a saját kategóriájában (leghátul, out előtt). out/stock=0 → public oldalon leghátul + szürke.
       </div>
     `;
 
@@ -827,10 +810,10 @@ function markDirty(flags){
           id: ($("#p_id").value||"").trim(),
           categoryId: $("#p_cat").value,
           status: $("#p_status").value,
-          visible: !!$("#p_visible").checked,
           stock: Math.max(0, Number($("#p_stock").value||0)),
           price: ($("#p_price").value === "" ? null : Math.max(0, Number($("#p_price").value||0))),
           image: ($("#p_img").value||"").trim(),
+          visible: !!($("#p_visible")?.checked),
           name_hu: ($("#p_name").value||"").trim(),
           name_en: ($("#p_name").value||"").trim(),
           flavor_hu: ($("#p_fhu").value||"").trim(),
@@ -867,6 +850,289 @@ function markDirty(flags){
     syncStockLock();
   }
 
+
+  function popupById(id){
+    return state.doc.popups.find(p => p.id === String(id)) || null;
+  }
+
+  function renderPopups(){
+    const list = [...(state.doc.popups||[])].sort((a,b)=> Number(b.updatedAt||0) - Number(a.updatedAt||0));
+
+    const rows = list.map(pu => {
+      const title = pu.title_hu || pu.title_en || "(nincs cím)";
+      const cats = (pu.categoryIds||[]).length;
+      const prods = (pu.productIds||[]).length;
+      return `
+        <div class="rowline table" style="align-items:center;">
+          <div class="left">
+            <div style="font-weight:900;">
+              ${escapeHtml(title)}
+              <span class="small-muted" style="margin-left:10px;">ID: <b>${escapeHtml(pu.id)}</b></span>
+              <span class="small-muted" style="margin-left:10px;">rev: <b>${Number(pu.rev||0)}</b></span>
+            </div>
+            <div class="small-muted">Termékek: <b>${prods}</b> • Kategóriák: <b>${cats}</b></div>
+          </div>
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+            <label class="small-muted" style="display:flex;align-items:center;gap:8px;">
+              <input type="checkbox" data-puid="${escapeHtml(pu.id)}" data-k="enabled" ${pu.enabled!==false ? "checked":""}>
+              Aktív
+            </label>
+            <button class="ghost" data-editpopup="${escapeHtml(pu.id)}">Szerkeszt</button>
+            <button class="danger" data-delpopup="${escapeHtml(pu.id)}">Töröl</button>
+          </div>
+        </div>
+      `;
+    }).join("");
+
+    $("#panelPopups").innerHTML = `
+      <div class="actions table" style="align-items:center;">
+        <button class="primary" id="btnAddPopup">+ Új popup</button>
+        <div class="small-muted">Több popup is lehet aktív: a public oldalon sorban dobja fel. “Ne mutasd többször” popup-ID + rev alapján működik (ha módosítod, újra megjelenik).</div>
+      </div>
+      <div style="margin-top:10px;">${rows || `<div class="small-muted">Nincs popup létrehozva.</div>`}</div>
+    `;
+
+    $("#btnAddPopup").onclick = () => openPopupModal(null);
+
+    $("#panelPopups").querySelectorAll("input[data-puid]").forEach(inp => {
+      const handler = () => {
+        const id = inp.dataset.puid;
+        const k = inp.dataset.k;
+        const pu = popupById(id);
+        if(!pu) return;
+        if(k === "enabled") pu.enabled = !!inp.checked;
+        pu.updatedAt = Date.now();
+        pu.rev = pu.updatedAt;
+        markDirty({ products:true });
+        renderPopups();
+      };
+      inp.addEventListener("input", handler);
+      inp.addEventListener("change", handler);
+    });
+
+    $("#panelPopups").querySelectorAll("button[data-editpopup]").forEach(btn => {
+      btn.onclick = () => openPopupModal(btn.dataset.editpopup);
+    });
+    $("#panelPopups").querySelectorAll("button[data-delpopup]").forEach(btn => {
+      btn.onclick = () => {
+        const id = btn.dataset.delpopup;
+        state.doc.popups = (state.doc.popups||[]).filter(p => p.id !== id);
+        renderPopups();
+        markDirty({ products:true });
+      };
+    });
+  }
+
+  function openPopupModal(id){
+    const editing = id ? popupById(id) : null;
+    const now = Date.now();
+
+    const pu = editing ? JSON.parse(JSON.stringify(editing)) : {
+      id: "pu_" + Math.random().toString(16).slice(2) + "_" + now.toString(16),
+      enabled: true,
+      rev: now,
+      title_hu: "",
+      title_en: "",
+      categoryIds: [],
+      productIds: [],
+      createdAt: now,
+      updatedAt: now
+    };
+
+    // UI state
+    let pSearch = "";
+    let pCat = "all";
+
+    const body = document.createElement("div");
+    body.innerHTML = `
+      <div class="form-grid">
+        <div class="field third"><label>ID</label><input id="pu_id" value="${escapeHtml(pu.id)}" ${editing?"disabled":""}></div>
+        <div class="field third"><label>Cím (HU)</label><input id="pu_thu" value="${escapeHtml(pu.title_hu)}" placeholder="Új termékek"></div>
+        <div class="field third"><label>Cím (EN)</label><input id="pu_ten" value="${escapeHtml(pu.title_en)}" placeholder="New products"></div>
+        <div class="field full" style="display:flex;gap:10px;align-items:center;">
+          <label class="small-muted" style="display:flex;align-items:center;gap:8px;">
+            <input id="pu_enabled" type="checkbox" ${pu.enabled!==false ? "checked":""}> Aktív popup
+          </label>
+        </div>
+      </div>
+
+      <div class="small-muted" style="margin-top:10px;">Kategória kijelölés: ha bejelölöd, a popupban megjelenik az összes (látható) termék abból a kategóriából.</div>
+      <div id="pu_catBox" style="margin-top:10px; display:flex; gap:10px; flex-wrap:wrap;"></div>
+
+      <div style="margin-top:14px; display:grid; grid-template-columns: 1fr 340px; gap:14px; align-items:start;">
+        <div>
+          <div class="actions table" style="align-items:center; margin-bottom:10px;">
+            <input id="pu_psearch" placeholder="Keresés termékekben…" value="" style="flex:1;min-width:220px;">
+            <select id="pu_pcat" style="min-width:160px;">
+              <option value="all">Összes</option>
+              ${state.doc.categories.map(c => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.label_hu||c.id)}</option>`).join("")}
+            </select>
+          </div>
+
+          <div id="pu_gridWrap" style="max-height:56vh; overflow:auto; padding-right:6px;">
+            <div id="pu_grid" class="pick-grid"></div>
+          </div>
+        </div>
+
+        <div>
+          <div class="small-muted" style="margin-bottom:10px;">Kiválasztott termékek (max ~4 látszik, görgethető):</div>
+          <div id="pu_selected" class="pick-selected" style="max-height:420px; overflow:auto; padding-right:6px;"></div>
+        </div>
+      </div>
+    `;
+
+    openModal(editing ? "Popup szerkesztése" : "Új popup", "A public oldalon sorban dobja fel őket.", body, [
+      { label:"Mégse", kind:"ghost", onClick: closeModal },
+      { label:"Mentés", kind:"primary", onClick: () => {
+        const nid = ($("#pu_id").value||"").trim();
+        if(!nid) return;
+        if(!editing && state.doc.popups.some(x => x.id === nid)) return;
+
+        pu.id = nid;
+        pu.title_hu = ($("#pu_thu").value||"").trim();
+        pu.title_en = ($("#pu_ten").value||"").trim();
+        pu.enabled = !!$("#pu_enabled").checked;
+
+        pu.updatedAt = Date.now();
+        pu.rev = pu.updatedAt;
+
+        // categoryIds/productIds már UI state-ből frissítve van
+        if(editing){
+          const idx = state.doc.popups.findIndex(x => x.id === editing.id);
+          if(idx >= 0) state.doc.popups[idx] = pu;
+        }else{
+          state.doc.popups.push(pu);
+        }
+
+        closeModal();
+        renderAll();
+        markDirty({ products:true });
+      }}
+    ]);
+
+    const catBox = $("#pu_catBox");
+    catBox.innerHTML = state.doc.categories.map(c => {
+      const on = (pu.categoryIds||[]).includes(c.id);
+      return `
+        <label class="badge" style="cursor:pointer;">
+          <input type="checkbox" data-pucat="${escapeHtml(c.id)}" ${on?"checked":""} style="margin-right:8px;">
+          ${escapeHtml(c.label_hu||c.id)}
+        </label>
+      `;
+    }).join("");
+
+    catBox.querySelectorAll("input[data-pucat]").forEach(ch => {
+      const handler = () => {
+        const cid = ch.dataset.pucat;
+        const on = !!ch.checked;
+        pu.categoryIds = Array.from(new Set((pu.categoryIds||[]).filter(Boolean)));
+        if(on && !pu.categoryIds.includes(cid)) pu.categoryIds.push(cid);
+        if(!on) pu.categoryIds = pu.categoryIds.filter(x => x !== cid);
+        renderPopupPicker();
+      };
+      ch.addEventListener("change", handler);
+      ch.addEventListener("input", handler);
+    });
+
+    $("#pu_psearch").oninput = () => { pSearch = ($("#pu_psearch").value||"").toLowerCase(); renderPopupPicker(); };
+    $("#pu_pcat").onchange = () => { pCat = $("#pu_pcat").value; renderPopupPicker(); };
+
+    function renderPopupPicker(){
+      const selected = new Set(pu.productIds||[]);
+
+      // Selected preview
+      const selWrap = $("#pu_selected");
+      const selList = (pu.productIds||[])
+        .map(id => prodById(id))
+        .filter(Boolean);
+
+      selWrap.innerHTML = selList.map(p => {
+        const eff = effectivePrice(p);
+        const status = p.status || "ok";
+        const cls = "card " + (status==="out" ? "dim out" : (status==="soon" ? "soon" : ""));
+        return `
+          <div class="${cls}" style="margin-bottom:10px; max-width:320px;">
+            <div class="hero"><img src="${escapeHtml(p.image||"")}" alt=""></div>
+            <div class="card-body">
+              <div style="font-weight:900;">${escapeHtml(p.name_hu||p.name_en||"")}</div>
+              <div class="small-muted">${escapeHtml(p.flavor_hu||p.flavor_en||"")}</div>
+              <div class="meta-row">
+                <div class="price">${eff.toLocaleString("hu-HU")} Ft</div>
+                <div class="stock">Készlet: <b>${status==="soon" ? "—" : p.stock}</b></div>
+              </div>
+              <button class="danger" data-unpick="${escapeHtml(p.id)}" style="width:100%; margin-top:10px;">Kivesz</button>
+            </div>
+          </div>
+        `;
+      }).join("") || `<div class="small-muted">Még nincs kiválasztva.</div>`;
+
+      selWrap.querySelectorAll("button[data-unpick]").forEach(b => {
+        b.onclick = () => {
+          const id = b.dataset.unpick;
+          pu.productIds = (pu.productIds||[]).filter(x => x !== id);
+          renderPopupPicker();
+        };
+      });
+
+      // Build full list: category-filtered + search
+      let all = [...state.doc.products];
+      if(pCat !== "all"){
+        all = all.filter(p => p.categoryId === pCat);
+      }
+      if(pSearch){
+        all = all.filter(p => (`${p.name_hu} ${p.name_en} ${p.flavor_hu} ${p.flavor_en}`).toLowerCase().includes(pSearch));
+      }
+      // sort: ok/soon/out, then name/flavor
+      const r = (s) => s==="ok"?0:(s==="soon"?1:2);
+      all.sort((a,b)=>{
+        const ra=r(a.status), rb=r(b.status);
+        if(ra!==rb) return ra-rb;
+        return (`${a.name_hu||a.name_en||""} ${a.flavor_hu||a.flavor_en||""}`).localeCompare(`${b.name_hu||b.name_en||""} ${b.flavor_hu||b.flavor_en||""}`,"hu");
+      });
+
+      $("#pu_grid").innerHTML = all.map(p => {
+        const eff = effectivePrice(p);
+        const status = p.status || "ok";
+        const isSel = selected.has(p.id);
+        const cls = "card pick-card " + (isSel ? "selected " : "") + (status==="out" ? "dim out" : (status==="soon" ? "soon" : ""));
+        return `
+          <div class="${cls}" data-pick="${escapeHtml(p.id)}" style="min-width:220px;">
+            <div class="hero">
+              <img src="${escapeHtml(p.image||"")}" alt="">
+              <div class="badges">
+                ${p.visible===false ? `<span class="badge out">rejtve</span>` : ``}
+                ${status==="soon" ? `<span class="badge soon">hamarosan</span>` : ``}
+                ${status==="out" ? `<span class="badge out">elfogyott</span>` : ``}
+              </div>
+              <div class="overlay-title">
+                <div class="name">${escapeHtml(p.name_hu||p.name_en||"")}</div>
+                <div class="flavor">${escapeHtml(p.flavor_hu||p.flavor_en||"")}</div>
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="meta-row">
+                <div class="price">${eff.toLocaleString("hu-HU")} Ft</div>
+                <div class="stock">Készlet: <b>${status==="soon" ? "—" : p.stock}</b></div>
+              </div>
+              <div class="small-muted">${isSel ? "Kiválasztva ✅" : "Kattints a kijelöléshez"}</div>
+            </div>
+          </div>
+        `;
+      }).join("");
+
+      $("#pu_grid").querySelectorAll("[data-pick]").forEach(el => {
+        el.onclick = () => {
+          const id = el.dataset.pick;
+          const set = new Set(pu.productIds||[]);
+          if(set.has(id)) set.delete(id); else set.add(id);
+          pu.productIds = Array.from(set);
+          renderPopupPicker();
+        };
+      });
+    }
+
+    renderPopupPicker();
+  }
   function renderSales(){
     const cats = [{id:"all", label:"Mind"}, ...state.doc.categories.map(c=>({id:c.id,label:c.label_hu||c.id}))];
 
@@ -1104,198 +1370,6 @@ function markDirty(flags){
   }
 
 
-
-  /* ---------- Popups (Új termékek) ---------- */
-  function renderPopups(){
-    const panel = $("#panelPopups");
-    if(!panel) return;
-
-    const popups = [...(state.doc.popups||[])].sort((a,b)=> (b.createdAt||0)-(a.createdAt||0));
-
-    const rows = popups.map(pp => {
-      const cats = (pp.categoryIds||[]).map(id => (catById(id)?.label_hu || id)).join(", ");
-      const prods = (pp.productIds||[]).length;
-      return `
-        <div class="rowline table">
-          <div class="left">
-            <div style="font-weight:900;">${escapeHtml(pp.title_hu || "Új termékek")} <span class="small-muted">• ID: <b>${escapeHtml(pp.id)}</b></span></div>
-            <div class="small-muted">Kategóriák: <b>${escapeHtml(cats || "—")}</b> • Kézi termékek: <b>${prods}</b> • Rev: <b>${Number(pp.rev||0)}</b></div>
-          </div>
-          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-            <label class="chk"><input type="checkbox" data-pp="${escapeHtml(pp.id)}" data-k="enabled"${pp.enabled===false?"":" checked"}> Aktív</label>
-            <button class="ghost" data-editpp="${escapeHtml(pp.id)}">Szerkeszt</button>
-            <button class="danger" data-delpp="${escapeHtml(pp.id)}">Töröl</button>
-          </div>
-        </div>
-      `;
-    }).join("");
-
-    panel.innerHTML = `
-      <div class="actions">
-        <button class="primary" id="btnAddPopup">+ Új pop-up</button>
-        <div class="small-muted">Pop-up-ok: sorrend = létrehozás szerint (legújabb elöl). "Ne mutasd többször" a public oldalon popup ID + rev alapján működik.</div>
-      </div>
-      <div style="margin-top:10px;">${rows || `<div class="small-muted">Nincs pop-up.</div>`}</div>
-    `;
-
-    $("#btnAddPopup").onclick = () => openPopupModal(null);
-
-    panel.querySelectorAll('input[data-pp][data-k="enabled"]').forEach(ch => {
-      ch.addEventListener("change", () => {
-        const id = ch.dataset.pp;
-        const pp = (state.doc.popups||[]).find(x=>x.id===id);
-        if(!pp) return;
-        pp.enabled = !!ch.checked;
-        pp.updatedAt = Date.now();
-        pp.rev = Date.now();
-        markDirty({ products:true });
-      });
-    });
-
-    panel.querySelectorAll("button[data-editpp]").forEach(b => b.onclick = () => openPopupModal(b.dataset.editpp));
-    panel.querySelectorAll("button[data-delpp]").forEach(b => b.onclick = () => {
-      const id = b.dataset.delpp;
-      const pp = (state.doc.popups||[]).find(x=>x.id===id);
-      if(!pp) return;
-      const body = document.createElement("div");
-      body.innerHTML = `<div class="small-muted">Biztos törlöd ezt a pop-upot? ID: <b>${escapeHtml(id)}</b></div>`;
-      openModal("Pop-up törlése", "", body, [
-        {label:"Mégse", kind:"ghost", onClick: closeModal},
-        {label:"Törlés", kind:"danger", onClick: () => {
-          state.doc.popups = (state.doc.popups||[]).filter(x=>x.id!==id);
-          closeModal();
-          renderPopups();
-          markDirty({ products:true });
-        }}
-      ]);
-    });
-  }
-
-  function openPopupModal(id){
-    const editing = id ? (state.doc.popups||[]).find(x=>x.id===id) : null;
-    const pp = editing ? {...editing} : {
-      id: "popup_" + Math.random().toString(16).slice(2) + "_" + Date.now().toString(16),
-      enabled: true,
-      rev: Date.now(),
-      title_hu: "Új termékek elérhetőek",
-      title_en: "New products available",
-      categoryIds: [],
-      productIds: [],
-      createdAt: Date.now(),
-      updatedAt: Date.now()
-    };
-
-    const body = document.createElement("div");
-    const cats = [...state.doc.categories].sort((a,b)=>(a.label_hu||a.id).localeCompare((b.label_hu||b.id),"hu"));
-    const prods = [...state.doc.products].sort((a,b)=>(a.name_hu||a.name_en||"").localeCompare((b.name_hu||b.name_en||""),"hu"));
-
-    body.innerHTML = `
-      <div class="form-grid">
-        <div class="field third"><label>ID</label><input id="pp_id" value="${escapeHtml(pp.id)}" ${editing?"disabled":""}></div>
-        <div class="field third"><label>Aktív</label><label class="chk" style="justify-content:flex-start;"><input type="checkbox" id="pp_enabled" ${pp.enabled===false?"":"checked"}> Bekapcsolva</label></div>
-        <div class="field third"><label>Rev (auto)</label><input id="pp_rev" value="${Number(pp.rev||0)}" disabled></div>
-
-        <div class="field third"><label>Cím HU</label><input id="pp_thu" value="${escapeHtml(pp.title_hu||"")}"></div>
-        <div class="field third"><label>Cím EN</label><input id="pp_ten" value="${escapeHtml(pp.title_en||"")}"></div>
-        <div class="field third"><label></label><div class="small-muted">Mentéskor rev frissül → újra feldobható.</div></div>
-
-        <div class="field full"><label>Kategóriák (ha bejelölöd: az összes termék abból a kategóriából)</label>
-          <div class="check-grid">
-            ${cats.map(c => `
-              <label class="chk"><input type="checkbox" class="pp_cat" value="${escapeHtml(c.id)}"${(pp.categoryIds||[]).includes(c.id)?" checked":""}> ${escapeHtml(c.label_hu||c.id)}</label>
-            `).join("")}
-          </div>
-        </div>
-
-        <div class="field full"><label>Kézi termékek (opcionális)</label>
-          <input id="pp_search" placeholder="Keresés..." style="margin-bottom:10px;">
-          <div class="pick-grid" id="pp_prod_list">
-            ${prods.map(p => {
-              const checked = (pp.productIds||[]).includes(p.id);
-              const nm = escapeHtml(p.name_hu||p.name_en||"—");
-              const fl = escapeHtml(p.flavor_hu||p.flavor_en||"");
-              const img = escapeHtml(p.image||"");
-              const price = effectivePrice(p);
-              const priceTxt = `${Number(price||0).toLocaleString("hu-HU")} Ft`;
-              const st = (p.status==="soon") ? "—" : String(Math.max(0, Number(p.stock||0)));
-              return `
-                <label class="pick-card${checked ? " is-checked" : ""}">
-                  <input type="checkbox" class="pp_prod" value="${escapeHtml(p.id)}"${checked ? " checked" : ""}>
-                  <div class="pick-img">${img ? `<img loading="lazy" decoding="async" src="${img}" alt="">` : ""}</div>
-                  <div class="pick-info">
-                    <div class="pick-name">${nm}</div>
-                    <div class="pick-flavor">${fl}</div>
-                    <div class="pick-row">
-                      <div class="pick-price">${escapeHtml(priceTxt)}</div>
-                      <div class="pick-stock">Készlet: <b>${escapeHtml(st)}</b>${st==="—"?"":" db"}</div>
-                    </div>
-                  </div>
-                </label>
-              `;
-            }).join("")}
-          </div>
-        </div>
-      </div>
-    `;
-
-    // search filter
-    setTimeout(() => {
-      const inp = $("#pp_search");
-      const list = $("#pp_prod_list");
-      if(inp && list){
-        inp.oninput = () => {
-          const q = (inp.value||"").toLowerCase();
-          list.querySelectorAll("label.pick-card").forEach(lab => {
-            const txt = (lab.textContent||"").toLowerCase();
-            lab.style.display = (!q || txt.includes(q)) ? "" : "none";
-          });
-        };
-      }
-
-      // kiválasztott állapot vizuálisan
-      if(list){
-        list.querySelectorAll("input.pp_prod").forEach(ch => {
-          ch.addEventListener("change", () => {
-            const card = ch.closest(".pick-card");
-            if(card) card.classList.toggle("is-checked", ch.checked);
-          });
-        });
-      }
-    }, 0);
-
-    openModal(editing ? "Pop-up szerkesztése" : "Új pop-up", "", body, [
-      { label:"Mégse", kind:"ghost", onClick: closeModal },
-      { label:"Mentés", kind:"primary", onClick: () => {
-        const nid = ($("#pp_id").value||"").trim();
-        if(!nid) return;
-
-        if(!editing && (state.doc.popups||[]).some(x => x.id === nid)) return;
-
-        const next = {
-          id: nid,
-          enabled: !!$("#pp_enabled").checked,
-          title_hu: ($("#pp_thu").value||"").trim() || "Új termékek elérhetőek",
-          title_en: ($("#pp_ten").value||"").trim() || "New products available",
-          categoryIds: Array.from(document.querySelectorAll(".pp_cat:checked")).map(x=>String(x.value)),
-          productIds: Array.from(document.querySelectorAll(".pp_prod:checked")).map(x=>String(x.value)),
-          createdAt: editing ? Number(editing.createdAt||Date.now()) : Date.now(),
-          updatedAt: Date.now(),
-          rev: Date.now()
-        };
-
-        if(editing){
-          state.doc.popups = (state.doc.popups||[]).map(x => x.id===editing.id ? next : x);
-        }else{
-          state.doc.popups = [next, ...(state.doc.popups||[])];
-        }
-
-        closeModal();
-        renderPopups();
-        markDirty({ products:true });
-      }}
-    ]);
-  }
-
 function drawChart(){
   const canvas = $("#revCanvas");
   const kpi = $("#chartKpi");
@@ -1440,6 +1514,8 @@ function drawChart(){
 
     // betöltés ha van config
     const cfg = loadCfg();
+    // hozzuk létre a settings inputokat előbb
+    renderSettings();
 
     // autoload, ha van minden
     if(cfg.owner && cfg.repo && cfg.token){

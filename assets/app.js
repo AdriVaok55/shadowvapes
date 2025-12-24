@@ -1,1111 +1,986 @@
 (() => {
   const $ = (s) => document.querySelector(s);
 
+  const I18N = {
+    hu: {
+      all: "Összes termék",
+      soon: "Hamarosan",
+      search: "Keresés…",
+      stock: "Készlet",
+      price: "Ár",
+      soldout: "elfogyott",
+      coming: "hamarosan",
+      hot: "felkapott",
+      newTitle: "Új termékek elérhetőek",
+      dontShow: "Ne mutasd többször",
+      ok: "Értettem",
+      skipAll: "Összes átugrása",
+    },
+    en: {
+      all: "All products",
+      soon: "Coming soon",
+      search: "Search…",
+      stock: "Stock",
+      price: "Price",
+      soldout: "sold out",
+      coming: "coming soon",
+      hot: "trending",
+      newTitle: "New products available",
+      dontShow: "Don't show again",
+      ok: "Got it",
+      skipAll: "Skip all",
+    }
+  };
+
   const state = {
-    lang: localStorage.getItem("sv_lang") || "hu",
-    active: "all",
-    productsDoc: { categories: [], products: [], popups: [], _meta: null },
+    lang: "hu",
+    active: "all", // categoryId | 'all' | 'soon'
+    q: "",
+    doc: { categories: [], products: [], popups: [] },
     sales: [],
-    salesFresh: false,
-    search: "",
-    etagProducts: "",
-    etagSales: "",
-    featuredByCat: new Map(), // categoryId -> productId
-
-    // anti-flicker / anti-stale overwrites
-    docRev: 0,
-    docHash: "",
-    salesHash: "",
-    lastLiveTs: 0,
+    featuredByCat: new Map(),
+    source: null,
+    lastSigDoc: "",
+    lastSigSales: "",
+    renderedOnce: false,
+    popupOpen: false,
   };
 
-  const UI = {
-    all: { hu: "Összes termék", en: "All products" },
-    soon: { hu: "Hamarosan", en: "Coming soon" },
-    stock: { hu: "Készlet", en: "Stock" },
-    pcs: { hu: "db", en: "pcs" },
-    out: { hu: "Elfogyott", en: "Sold out" },
-    hot: { hu: "Felkapott", en: "Trending" },
-    newAvail: { hu: "Új termékek elérhetőek", en: "New products available" },
-    understood: { hu: "Értettem", en: "Got it" },
-    skipAll: { hu: "Összes átugrása", en: "Skip all" },
-    dontShow: { hu: "Ne mutasd többször", en: "Don't show again" },
+  const LS = {
+    sourceJson: "sv_source_json", // {owner,repo,branch}
+    popupDismissPrefix: "sv_popup_dismissed_", // + id + "_" + rev
   };
 
-  const t = (k) => (UI[k] ? UI[k][state.lang] : k);
+  function t(k){ return (I18N[state.lang] && I18N[state.lang][k]) || k; }
+  function loc(){ return state.lang === "hu" ? "hu" : "en"; }
 
-  const locale = () => (state.lang === "en" ? "en" : "hu");
-
-  const norm = (s) =>
-    (s || "")
-      .toString()
+  function norm(s){
+    return String(s||"")
       .toLowerCase()
       .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "");
-
-  function catLabel(c) {
-    return (c && (state.lang === "en" ? (c.label_en || c.label_hu || c.id) : (c.label_hu || c.label_en || c.id))) || "";
+      .replace(/\p{Diacritic}/gu, "");
   }
 
-  function getName(p) {
-    return (p && (p.name_hu || p.name_en || p.name)) || "";
-  }
-  function getFlavor(p) {
-    if (!p) return "";
-    return state.lang === "en"
-      ? (p.flavor_en || p.flavor_hu || p.flavor || "")
-      : (p.flavor_hu || p.flavor_en || p.flavor || "");
-  }
-
-  function effectivePrice(p) {
-    const price = p && p.price;
-    if (price !== null && price !== undefined && price !== "" && Number(price) > 0) return Number(price);
-    const c = (state.productsDoc.categories || []).find((x) => String(x.id) === String(p.categoryId));
-    const bp = c ? Number(c.basePrice || 0) : 0;
-    return Number.isFinite(bp) ? bp : 0;
-  }
-
-  function isOut(p) {
-    const st = (p && p.status) || "ok";
-    const stock = Math.max(0, Number(p && p.stock ? p.stock : 0));
-    return st === "out" || stock <= 0;
-  }
-
-  function isSoon(p) {
-    return ((p && p.status) || "ok") === "soon";
-  }
-
-  /* ----------------- Source resolving (RAW preferált, custom domainen is) ----------------- */
-  let source = null; // {owner, repo, branch}
-
-  async function validateSource(s){
-    try{
-      if(!s || !s.owner || !s.repo || !s.branch) return false;
-      const testUrl = `https://raw.githubusercontent.com/${s.owner}/${s.repo}/${s.branch}/data/products.json?_=${Date.now()}`;
-      const r = await fetch(testUrl, { cache: "no-store" });
-      return r.ok;
-    }catch{ return false; }
-  }
-
-  function getOwnerRepoFromUrl() {
-    const host = location.hostname;
-    if (!host.endsWith(".github.io")) return null;
-    const owner = host.replace(".github.io", "");
-    const parts = location.pathname.split("/").filter(Boolean);
-    const repo = parts.length ? parts[0] : null;
-    if (!repo) return null;
-    return { owner, repo };
-  }
-
-  function getOwnerRepoCfg() {
-    const owner = (localStorage.getItem("sv_owner") || "").trim();
-    const repo = (localStorage.getItem("sv_repo") || "").trim();
-    const branch = (localStorage.getItem("sv_branch") || "").trim();
-    if (!owner || !repo) return null;
-    return { owner, repo, branch: branch || null };
+  function escapeHtml(s){
+    return String(s||"").replace(/[&<>"']/g, (c) => ({
+      "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
+    }[c]));
   }
 
   function applySyncParams(){
     try{
       const u = new URL(location.href);
-      const o = (u.searchParams.get("sv_owner")||"").trim();
-      const r = (u.searchParams.get("sv_repo")||"").trim();
-      const b = (u.searchParams.get("sv_branch")||"").trim();
-      if(o && r){
-        localStorage.setItem("sv_owner", o);
-        localStorage.setItem("sv_repo", r);
-        if(b) localStorage.setItem("sv_branch", b);
-        const src = { owner:o, repo:r, branch: b || "main" };
-        localStorage.setItem("sv_source", JSON.stringify(src));
+      const owner = u.searchParams.get("sv_owner");
+      const repo = u.searchParams.get("sv_repo");
+      const branch = u.searchParams.get("sv_branch") || "main";
+      if(owner && repo){
+        const src = { owner, repo, branch };
+        localStorage.setItem(LS.sourceJson, JSON.stringify(src));
+        // tisztítsuk az URL-t
         u.searchParams.delete("sv_owner");
         u.searchParams.delete("sv_repo");
         u.searchParams.delete("sv_branch");
-        history.replaceState({}, "", u.pathname + (u.search ? u.search : "") + u.hash);
+        history.replaceState({}, "", u.toString());
       }
     }catch{}
   }
 
-  async function resolveSource() {
-    if (source) return source;
-
-    try {
-      const cached = JSON.parse(localStorage.getItem("sv_source") || "null");
-      if (cached && cached.owner && cached.repo && cached.branch) {
-        const ok = await validateSource(cached);
-        if (ok) {
-          source = cached;
-          return source;
-        }
-        try { localStorage.removeItem("sv_source"); } catch {}
+  function readSourceFromLS(){
+    try{
+      const raw = localStorage.getItem(LS.sourceJson);
+      if(!raw) return null;
+      const obj = JSON.parse(raw);
+      if(obj && obj.owner && obj.repo){
+        return { owner: String(obj.owner), repo: String(obj.repo), branch: String(obj.branch||"main") };
       }
-    } catch {}
+    }catch{}
+    return null;
+  }
 
-    try {
-      const r = await fetch(`data/sv_source.json?_=${Date.now()}`, { cache: "no-store" });
-      if (r.ok) {
+  function deriveGithubPagesSource(){
+    try{
+      const host = location.hostname || "";
+      if(!host.endsWith(".github.io")) return null;
+      const owner = host.split(".")[0];
+      const seg = (location.pathname || "/").split("/").filter(Boolean)[0] || "";
+      const repo = seg ? seg : `${owner}.github.io`;
+      return { owner, repo, branch: "main" };
+    }catch{
+      return null;
+    }
+  }
+
+  async function resolveSource({forceBust=false}={}){
+    if(state.source) return state.source;
+
+    const ls = readSourceFromLS();
+    if(ls){ state.source = ls; return ls; }
+
+    // 1) data/sv_source.json a site-on (cache bust)
+    try{
+      const v = forceBust ? `?v=${Date.now()}` : "";
+      const r = await fetch(`data/sv_source.json${v}`, { cache: "no-store" });
+      if(r.ok){
         const j = await r.json();
-        if (j && j.owner && j.repo) {
-          const br = String(j.branch || j.ref || "main").trim();
-          source = { owner: String(j.owner).trim(), repo: String(j.repo).trim(), branch: br };
-          try { localStorage.setItem("sv_source", JSON.stringify(source)); } catch {}
-          return source;
+        if(j && j.owner && j.repo){
+          const src = { owner: String(j.owner), repo: String(j.repo), branch: String(j.branch||"main") };
+          localStorage.setItem(LS.sourceJson, JSON.stringify(src));
+          state.source = src;
+          return src;
         }
       }
-    } catch {}
+    }catch{}
 
-    const or = getOwnerRepoFromUrl() || getOwnerRepoCfg();
-    if (!or) return null;
-
-    const branches = [or.branch, "main", "master", "gh-pages"]
-      .filter(Boolean)
-      .filter((v, i, a) => a.indexOf(v) === i);
-
-    for (const br of branches) {
-      const testUrl = `https://raw.githubusercontent.com/${or.owner}/${or.repo}/${br}/data/products.json?_=${Date.now()}`;
-      try {
-        const r = await fetch(testUrl, { cache: "no-store" });
-        if (r.ok) {
-          source = { owner: or.owner, repo: or.repo, branch: br };
-          try { localStorage.setItem("sv_source", JSON.stringify(source)); } catch {}
-          return source;
-        }
-      } catch {}
+    // 2) heuristic GitHub Pages
+    const gh = deriveGithubPagesSource();
+    if(gh){
+      localStorage.setItem(LS.sourceJson, JSON.stringify(gh));
+      state.source = gh;
+      return gh;
     }
 
     return null;
   }
 
-  async function fetchJson(relPath, { forceBust=false } = {}){
-    const src = await resolveSource();
-    const relBase = relPath;
-    const rawBase = src ? `https://raw.githubusercontent.com/${src.owner}/${src.repo}/${src.branch}/${relPath}` : null;
+  async function fetchJson(relPath, {forceBust=false}={}){
+    const v = forceBust ? `?v=${Date.now()}` : "";
+    const src = await resolveSource({forceBust});
+    // RAW first (gyorsabb frissülés)
+    if(src && src.owner && src.repo){
+      const url = `https://raw.githubusercontent.com/${encodeURIComponent(src.owner)}/${encodeURIComponent(src.repo)}/${encodeURIComponent(src.branch||"main")}/${relPath}${v}`;
+      try{
+        const r = await fetch(url, { cache: "no-store" });
+        if(r.ok) return await r.json();
+      }catch{}
+    }
+    // fallback: site
+    const r2 = await fetch(`${relPath}${v}`, { cache: "no-store" });
+    if(!r2.ok) throw new Error(`Fetch failed: ${relPath} (${r2.status})`);
+    return await r2.json();
+  }
 
-    const tick = Math.floor(Date.now() / 9000);
-    const mkUrl = (base) => `${base}${base.includes("?") ? "&" : "?"}_=${forceBust ? Date.now() : tick}`;
-
-    const headers = {
-      "Cache-Control": "no-cache, no-store, must-revalidate",
-      Pragma: "no-cache",
+  function normalizeDoc(doc){
+    const d = doc && typeof doc === "object" ? doc : {};
+    const out = {
+      categories: Array.isArray(d.categories) ? d.categories : [],
+      products: Array.isArray(d.products) ? d.products : [],
+      popups: Array.isArray(d.popups) ? d.popups : [],
+      updatedAt: Number(d.updatedAt||d.rev||0) || 0,
     };
 
-    if (rawBase) {
-      try {
-        const url = mkUrl(rawBase);
-        const r = await fetch(url, { cache: "no-store", headers });
-        if (r.status === 304) return null;
-        if (r.ok) return await r.json();
-        try { localStorage.removeItem("sv_source"); } catch {}
-        source = null;
-      } catch {
-        try { localStorage.removeItem("sv_source"); } catch {}
-        source = null;
-      }
-    }
-
-    const url = mkUrl(relBase);
-    const r = await fetch(url, { cache: "no-store", headers });
-    if (r.status === 304) return null;
-    if (!r.ok) throw new Error(`Nem tudtam betölteni: ${relPath} (${r.status})`);
-    return await r.json();
-  }
-
-  async function fetchProducts({ forceBust=false } = {}){
-    return await fetchJson("data/products.json", { forceBust });
-  }
-  async function fetchSales({ forceBust=false } = {}){
-    return await fetchJson("data/sales.json", { forceBust });
-  }
-
-  function normalizeDoc(data) {
-    if (Array.isArray(data)) return { categories: [], products: data, popups: [], _meta: null };
-    const categories = data && Array.isArray(data.categories) ? data.categories : [];
-    const products = data && Array.isArray(data.products) ? data.products : [];
-    const popups = data && Array.isArray(data.popups) ? data.popups : [];
-    const _meta = data && typeof data === "object" ? (data._meta || null) : null;
-    return { categories, products, popups, _meta };
-  }
-
-  function normalizeSales(data){
-    if(!Array.isArray(data)) return [];
-    return data.map(s => {
-      const legacyPid = s.productId || s.pid || s.product || "";
-      const legacyQty = s.qty || s.quantity || 1;
-      const legacyPrice = s.unitPrice || s.price || s.amount || 0;
-
-      const items = Array.isArray(s.items)
-        ? s.items.map(it => ({
-            productId: String(it.productId || it.pid || ""),
-            qty: Math.max(1, Number.parseFloat(it.qty || it.quantity || 1) || 1),
-            unitPrice: Math.max(0, Number.parseFloat(it.unitPrice || it.price || 0) || 0)
-          })).filter(it => it.productId)
-        : (legacyPid ? [{
-            productId: String(legacyPid),
-            qty: Math.max(1, Number.parseFloat(legacyQty) || 1),
-            unitPrice: Math.max(0, Number.parseFloat(legacyPrice) || 0)
-          }] : []);
-
-      return {
-        id: String(s.id || ""),
-        date: String(s.date || s.day || s.createdAt || ""),
-        name: s.name || "",
-        payment: s.payment || s.method || "",
-        items
-      };
-    }).filter(s => s.id);
-  }
-
-  /* ----------------- Featured (Felkapott) ----------------- */
-  function computeFeaturedByCategory(){
-    state.featuredByCat = new Map();
-    if(!state.salesFresh) return; // ✅ ha nem friss a sales, ne találgassunk felkapottat
-    const products = (state.productsDoc.products || []).filter(p => p && p.id && p.visible !== false);
-    const cats = (state.productsDoc.categories || []);
-    const enabledCats = new Set(cats.filter(c => c && c.id && (c.featuredEnabled === false ? false : true)).map(c => String(c.id)));
-
-    // totals: categoryId -> productId -> qty
-    const totals = new Map();
-    let any = 0;
-
-    for(const sale of (state.sales || [])){
-      for(const it of (sale.items || [])){
-        const pid = String(it.productId || "");
-        const qty = Number(it.qty || 0) || 0;
-        if(!pid || qty <= 0) continue;
-        const p = products.find(x => String(x.id) === pid);
-        if(!p) continue;
-        const cid = String(p.categoryId || "");
-        if(!cid || !enabledCats.has(cid)) continue;
-        any += qty;
-        if(!totals.has(cid)) totals.set(cid, new Map());
-        const m = totals.get(cid);
-        m.set(pid, (m.get(pid)||0) + qty);
-      }
-    }
-
-    if(any <= 0) return; // ✅ nincs eladás → nincs felkapott
-
-    for(const [cid, m] of totals.entries()){
-      let bestPid = null;
-      let bestQty = -1;
-
-      for(const [pid, qty] of m.entries()){
-        if(qty > bestQty){
-          bestQty = qty; bestPid = pid;
-        }else if(qty === bestQty && bestPid){
-          // tie-break: íz név abc szerint (HU/EN locale)
-          const a = products.find(x=>String(x.id)===pid);
-          const b = products.find(x=>String(x.id)===bestPid);
-          const fa = norm(getFlavor(a));
-          const fb = norm(getFlavor(b));
-          const cmp = fa.localeCompare(fb, locale());
-          if(cmp < 0) bestPid = pid;
-        }
-      }
-
-      if(bestPid) state.featuredByCat.set(cid, bestPid);
-    }
-  }
-
-
-  /* ----------------- Change detection (avoid flicker + stale overwrites) ----------------- */
-  function hashStr(str){
-    // tiny fast hash (djb2)
-    let h = 5381;
-    for(let i=0;i<str.length;i++){
-      h = ((h << 5) + h) ^ str.charCodeAt(i);
-    }
-    return (h >>> 0).toString(16);
-  }
-  function docRev(doc){
-    const r = doc && doc._meta ? Number(doc._meta.rev || doc._meta.updatedAt || 0) : 0;
-    return Number.isFinite(r) ? r : 0;
-  }
-  function docSig(doc){
-    try{
-      return hashStr(JSON.stringify({
-        c: doc.categories || [],
-        p: doc.products || [],
-        pp: doc.popups || [],
-        m: doc._meta || null
-      }));
-    }catch{ return ""; }
-  }
-  function salesSig(sales){
-    try{ return hashStr(JSON.stringify(sales || [])); }catch{ return ""; }
-  }
-
-  function applyDocIfNewer(nextDoc, { source="net" } = {}){
-    const next = normalizeDoc(nextDoc);
-    const nextSig = docSig(next);
-    if(!nextSig) return false;
-
-    const nextRev = docRev(next);
-    const now = Date.now();
-
-    // same content -> nothing
-    if(state.docHash && nextSig === state.docHash) return false;
-
-    // protect against stale RAW/Pages caches overwriting a just-saved live payload
-    if(state.docRev && nextRev && nextRev < state.docRev) return false;
-
-    // if we have a recent live update with rev, and network doc has no rev -> ignore briefly
-    if(state.docRev && !nextRev && state.lastLiveTs && (now - state.lastLiveTs) < 90_000){
-      return false;
-    }
-
-    state.productsDoc = next;
-    state.docHash = nextSig;
-    if(nextRev) state.docRev = nextRev;
-    if(source === "live") state.lastLiveTs = now;
-    return true;
-  }
-
-  function applySalesIfChanged(nextSales, { fresh=false } = {}){
-    const arr = Array.isArray(nextSales) ? nextSales : [];
-    const sig = salesSig(arr);
-    if(sig && sig === state.salesHash){
-      // keep fresh flag updated only if it becomes true
-      if(fresh) state.salesFresh = true;
-      return false;
-    }
-    state.sales = arr;
-    state.salesHash = sig;
-    state.salesFresh = !!fresh;
-    return true;
-  }
-
-  /* ----------------- Rendering ----------------- */
-  function orderedCategories() {
-    const cats = (state.productsDoc.categories || [])
-      .filter((c) => c && c.id)
-      .map((c) => ({
+    out.categories = out.categories
+      .filter(c => c && c.id)
+      .map(c => ({
         id: String(c.id),
-        label_hu: c.label_hu || c.id,
-        label_en: c.label_en || c.label_hu || c.id,
-        basePrice: Number(c.basePrice || 0),
-        featuredEnabled: (c.featuredEnabled === false) ? false : true
-      }))
-      .sort((a, b) => catLabel(a).localeCompare(catLabel(b), locale()));
+        label_hu: String(c.label_hu || c.id),
+        label_en: String(c.label_en || c.label_hu || c.id),
+        basePrice: Number(c.basePrice||0) || 0,
+        featuredEnabled: (c.featuredEnabled === false) ? false : true,
+      }));
 
-    return [
-      { id: "all", label_hu: t("all"), label_en: t("all"), virtual: true },
-      ...cats,
-      { id: "soon", label_hu: t("soon"), label_en: t("soon"), virtual: true },
-    ];
-  }
+    out.products = out.products
+      .filter(p => p && p.id)
+      .map(p => ({
+        id: String(p.id),
+        categoryId: String(p.categoryId||""),
+        status: (p.status === "ok" || p.status === "out" || p.status === "soon") ? p.status : "ok",
+        stock: Math.max(0, Number(p.stock||0)),
+        price: (p.price === "" || p.price === null || p.price === undefined) ? null : Number(p.price||0),
+        image: String(p.image||""),
+        visible: (p.visible === false) ? false : true,
+        name_hu: String(p.name_hu||""),
+        name_en: String(p.name_en||""),
+        flavor_hu: String(p.flavor_hu||""),
+        flavor_en: String(p.flavor_en||""),
+      }));
 
-  function filterList() {
-    const q = norm(state.search);
+    out.popups = out.popups
+      .filter(x => x && (x.id || x.title_hu || x.title_en || x.title))
+      .map(x => {
+        const id = String(x.id || ("pu_" + Math.random().toString(16).slice(2) + "_" + Date.now().toString(16)));
+        const updatedAt = Number(x.updatedAt || x.rev || Date.now());
+        const createdAt = Number(x.createdAt || x.rev || updatedAt || Date.now());
+        const rev = Number(x.rev || updatedAt || Date.now());
+        const catIds = Array.isArray(x.categoryIds) ? x.categoryIds.map(v => String(v)).filter(Boolean) : [];
+        const prodIds = Array.isArray(x.productIds) ? x.productIds.map(v => String(v)).filter(Boolean) : [];
+        return {
+          id,
+          enabled: (x.enabled === false) ? false : true,
+          rev,
+          title_hu: String(x.title_hu || x.title || ""),
+          title_en: String(x.title_en || x.title_hu || x.title || ""),
+          categoryIds: catIds,
+          productIds: prodIds,
+          createdAt,
+          updatedAt,
+        };
+      });
 
-    let list = (state.productsDoc.products || []).map((p) => ({
-      ...p,
-      id: String(p.id || ""),
-      categoryId: String(p.categoryId || ""),
-      status: p.status === "soon" || p.status === "out" || p.status === "ok" ? p.status : "ok",
-      stock: Math.max(0, Number(p.stock || 0)),
-      visible: (p.visible === false) ? false : true
-    })).filter(p => p.id && p.visible !== false);
-
-    if (state.active === "soon") {
-      list = list.filter((p) => p.status === "soon");
-    } else {
-      if (state.active !== "all") list = list.filter((p) => String(p.categoryId) === String(state.active));
-    }
-
-    if (q) {
-      list = list.filter((p) => norm(getName(p) + " " + getFlavor(p)).includes(q));
-    }
-
-    // ✅ order: ok ... then soon ... then out
-    const okPart = list.filter((p) => !isOut(p) && !isSoon(p));
-    const soonPart = list.filter((p) => !isOut(p) && isSoon(p));
-    const outPart = list.filter((p) => isOut(p));
-
-    const groupSort = (arr) => {
-      const map = new Map();
-      for (const p of arr) {
-        const key = norm(getName(p));
-        if (!map.has(key)) map.set(key, []);
-        map.get(key).push(p);
-      }
-      const keys = [...map.keys()].sort((a, b) => a.localeCompare(b, locale()));
-      const out = [];
-      for (const k of keys) {
-        const items = map.get(k);
-        items.sort((a, b) => norm(getFlavor(a)).localeCompare(norm(getFlavor(b)), locale()));
-        out.push(...items);
-      }
-      return out;
-    };
-
-    return [...groupSort(okPart), ...groupSort(soonPart), ...groupSort(outPart)];
-  }
-
-  function fmtFt(n) {
-    const v = Number(n || 0);
-    return v.toLocaleString("hu-HU") + " Ft";
-  }
-
-  function renderNav() {
-    const nav = $("#nav");
-    nav.innerHTML = "";
-
-    const cats = orderedCategories();
-    for (const c of cats) {
-      const btn = document.createElement("button");
-      btn.textContent = c.id === "all" ? t("all") : c.id === "soon" ? t("soon") : catLabel(c);
-      if (state.active === c.id) btn.classList.add("active");
-      btn.onclick = () => {
-        state.active = c.id;
-        $("#title").textContent = btn.textContent;
-        renderNav();
-        renderGrid();
-      };
-      nav.appendChild(btn);
-    }
-  }
-
-  function getFeaturedListForAll(){
-    const cats = (state.productsDoc.categories || []).filter(c => c && c.id && (c.featuredEnabled === false ? false : true));
-    cats.sort((a,b)=>catLabel(a).localeCompare(catLabel(b), locale()));
-    const out = [];
-    for(const c of cats){
-      const pid = state.featuredByCat.get(String(c.id));
-      if(!pid) continue;
-      const p = (state.productsDoc.products||[]).find(x=>String(x.id)===String(pid));
-      if(p && p.visible !== false) out.push(p);
-    }
     return out;
   }
 
-  function renderGrid() {
-    const grid = $("#grid");
-    const empty = $("#empty");
-    grid.innerHTML = "";
+  function effectivePrice(p){
+    const cat = state.doc.categories.find(c => c.id === p.categoryId);
+    const base = cat ? Number(cat.basePrice||0) : 0;
+    const pr = (p.price === null || p.price === undefined || p.price === "") ? null : Number(p.price||0);
+    return (pr === null || Number.isNaN(pr)) ? base : pr;
+  }
 
-    let list = filterList();
+  function catLabel(c){
+    return state.lang === "hu" ? (c.label_hu||c.id) : (c.label_en||c.label_hu||c.id);
+  }
 
-    // ✅ Featured: kategóriánként 1-1 (ha van eladás) + kategória toggle (admin)
-    const featuredIds = new Set();
-    let featuredToPrepend = [];
+  function productName(p){
+    return state.lang === "hu" ? (p.name_hu||p.name_en||"") : (p.name_en||p.name_hu||"");
+  }
+  function productFlavor(p){
+    return state.lang === "hu" ? (p.flavor_hu||p.flavor_en||"") : (p.flavor_en||p.flavor_hu||"");
+  }
 
+  function rankStatus(s){
+    // ok -> 0, soon -> 1 (leghátul), out -> 2 (legutolsó)
+    return s === "ok" ? 0 : (s === "soon" ? 1 : 2);
+  }
+
+  function computeFeaturedByCat(){
+    const map = new Map();
+    const prodById = new Map(state.doc.products.map(p => [p.id, p]));
+    const counts = new Map(); // catId -> Map(prodId->qty)
+
+    for(const sale of (state.sales||[])){
+      if(!sale || !Array.isArray(sale.items)) continue;
+      for(const it of sale.items){
+        const pid = String(it.productId||"");
+        const qty = Math.max(0, Number(it.qty||0));
+        if(!pid || !qty) continue;
+        const p = prodById.get(pid);
+        if(!p) continue;
+        if(p.visible === false) continue;
+
+        const cid = p.categoryId || "";
+        if(!cid) continue;
+        if(!counts.has(cid)) counts.set(cid, new Map());
+        const cm = counts.get(cid);
+        cm.set(pid, (cm.get(pid)||0) + qty);
+      }
+    }
+
+    for(const c of state.doc.categories){
+      if(c.featuredEnabled === false) continue;
+      const cm = counts.get(c.id);
+      if(!cm) continue;
+      // max qty
+      let bestId = "";
+      let bestQty = 0;
+      for(const [pid, qty] of cm.entries()){
+        if(qty > bestQty){
+          bestQty = qty;
+          bestId = pid;
+        }else if(qty === bestQty && qty > 0){
+          // tie break by flavor (locale)
+          const pa = prodById.get(pid);
+          const pb = prodById.get(bestId);
+          const fa = productFlavor(pa||{});
+          const fb = productFlavor(pb||{});
+          if(fa.localeCompare(fb, loc()) < 0){
+            bestId = pid;
+          }
+        }
+      }
+      if(bestQty > 0 && bestId) map.set(c.id, bestId);
+    }
+
+    state.featuredByCat = map;
+  }
+
+  function filterProducts(){
+    const q = norm(state.q);
+    let list = state.doc.products.filter(p => p.visible !== false);
+
+    // category filter
+    if(state.active === "soon"){
+      list = list.filter(p => p.status === "soon");
+    }else if(state.active !== "all"){
+      list = list.filter(p => p.categoryId === state.active);
+    }
+
+    if(q){
+      list = list.filter(p => {
+        const hay = norm(`${p.name_hu} ${p.name_en} ${p.flavor_hu} ${p.flavor_en}`);
+        return hay.includes(q);
+      });
+    }
+
+    // sort within status rank, then name, then flavor (locale)
+    list.sort((a,b) => {
+      const ra = rankStatus(a.status), rb = rankStatus(b.status);
+      if(ra !== rb) return ra - rb;
+      const na = productName(a), nb = productName(b);
+      const cn = na.localeCompare(nb, loc());
+      if(cn !== 0) return cn;
+      const fa = productFlavor(a), fb = productFlavor(b);
+      return fa.localeCompare(fb, loc());
+    });
+
+    // group same name next to each other
+    // (simple stable regroup: sort already ensures it, but ensure exact)
+    // Keep as-is.
+
+    // pin featured
     if(state.active !== "soon"){
+      const pinned = [];
+      const pinnedIds = new Set();
+
       if(state.active === "all"){
-        featuredToPrepend = getFeaturedListForAll();
+        const cats = [...state.doc.categories].sort((a,b)=>catLabel(a).localeCompare(catLabel(b), loc()));
+        for(const c of cats){
+          const pid = state.featuredByCat.get(c.id);
+          if(!pid) continue;
+          const idx = list.findIndex(p => p.id === pid);
+          if(idx >= 0){
+            const p = list.splice(idx,1)[0];
+            p.__featured = true;
+            pinned.push(p);
+            pinnedIds.add(pid);
+          }
+        }
       }else{
-        const pid = state.featuredByCat.get(String(state.active));
+        const pid = state.featuredByCat.get(state.active);
         if(pid){
-          const p = (state.productsDoc.products||[]).find(x=>String(x.id)===String(pid));
-          if(p && p.visible !== false) featuredToPrepend = [p];
+          const idx = list.findIndex(p => p.id === pid);
+          if(idx >= 0){
+            const p = list.splice(idx,1)[0];
+            p.__featured = true;
+            pinned.push(p);
+            pinnedIds.add(pid);
+          }
         }
       }
+
+      // clear old flags
+      for(const p of list){ delete p.__featured; }
+
+      return [...pinned, ...list];
     }
 
-    for(const fp of featuredToPrepend){
-      featuredIds.add(String(fp.id));
+    // clear old flags
+    for(const p of list){ delete p.__featured; }
+    return list;
+  }
+
+  function renderNav(){
+    const nav = $("#categories");
+    if(!nav) return;
+    const cats = [...state.doc.categories].sort((a,b)=>catLabel(a).localeCompare(catLabel(b), loc()));
+
+    // "All" first, "Soon" last
+    nav.innerHTML = `
+      <button class="chip ${state.active==="all"?"active":""}" data-cat="all">${escapeHtml(t("all"))}</button>
+      ${cats.map(c => `
+        <button class="chip ${state.active===c.id?"active":""}" data-cat="${escapeHtml(c.id)}">${escapeHtml(catLabel(c))}</button>
+      `).join("")}
+      <button class="chip ${state.active==="soon"?"active":""}" data-cat="soon">${escapeHtml(t("soon"))}</button>
+    `;
+
+    nav.querySelectorAll("button[data-cat]").forEach(b => {
+      b.onclick = () => {
+        state.active = b.dataset.cat;
+        renderNav();
+        renderGrid();
+      };
+    });
+  }
+
+  function cardBadges(p){
+    const arr = [];
+    if(p.__featured) arr.push(`<span class="badge hot">${escapeHtml(t("hot"))}</span>`);
+    if(p.status === "soon") arr.push(`<span class="badge soon">${escapeHtml(t("coming"))}</span>`);
+    if(p.status === "out" || p.stock <= 0) arr.push(`<span class="badge out">${escapeHtml(t("soldout"))}</span>`);
+    return arr.join("");
+  }
+
+  function renderGrid(){
+    const grid = $("#grid");
+    if(!grid) return;
+
+    const list = filterProducts();
+
+    if(!list.length){
+      grid.innerHTML = `<div class="small-muted">—</div>`;
+      return;
     }
 
-    if(featuredToPrepend.length){
-      // remove from main list so ne duplázzon
-      list = list.filter(p => !featuredIds.has(String(p.id)));
-      list = [...featuredToPrepend, ...list];
-    }
-
-    $("#count").textContent = String(list.length);
-    empty.style.display = list.length ? "none" : "block";
-
-    for (const p of list) {
-      const name = getName(p);
-      const flavor = getFlavor(p);
-      const out = isOut(p);
-      const soon = isSoon(p);
-      const featured = featuredIds.has(String(p.id));
-      const stockShown = out ? 0 : (soon ? Math.max(0, Number(p.stock || 0)) : Math.max(0, Number(p.stock || 0)));
+    const html = list.map(p => {
       const price = effectivePrice(p);
+      const name = productName(p);
+      const flavor = productFlavor(p);
+      const stock = (p.status === "soon") ? "—" : String(Math.max(0, p.stock||0));
 
-      const card = document.createElement("div");
-      card.className = "card fade-in" + (out ? " dim" : "") + (soon ? " soon" : "") + (featured ? " featured" : "");
+      const isOut = (p.status === "out") || (p.stock <= 0 && p.status !== "soon");
+      const cls = [
+        "card",
+        (!state.renderedOnce ? "fade-in" : ""),
+        (isOut ? "dim out" : (p.status==="soon" ? "soon" : "")),
+        (p.__featured ? "featured" : "")
+      ].filter(Boolean).join(" ");
 
-      const hero = document.createElement("div");
-      hero.className = "hero";
-
-      const img = document.createElement("img");
-      img.loading = "lazy";
-      img.alt = (name + (flavor ? " - " + flavor : "")).trim();
-      img.src = p.image || "";
-
-      // sold-out legyen szürke (CSS is)
-      if (out) {
-        img.style.filter = "grayscale(.75) contrast(.95) brightness(.85)";
-      }
-
-      const badges = document.createElement("div");
-      badges.className = "badges";
-
-      if(featured){
-        const b = document.createElement("div");
-        b.className = "badge hot";
-        b.textContent = t("hot");
-        badges.appendChild(b);
-      }
-
-      if (soon) {
-        const b = document.createElement("div");
-        b.className = "badge soon";
-        b.textContent = t("soon");
-        badges.appendChild(b);
-      }
-
-      if (out) {
-        const b = document.createElement("div");
-        b.className = "badge out";
-        b.textContent = t("out");
-        badges.appendChild(b);
-      }
-
-      const overlay = document.createElement("div");
-      overlay.className = "overlay-title";
-      overlay.innerHTML = `
-        <div class="name">${name}</div>
-        <div class="flavor">${flavor}</div>
+      return `
+        <div class="${cls}">
+          <div class="hero">
+            <img src="${escapeHtml(p.image||"")}" alt="${escapeHtml(name)}" loading="lazy">
+            <div class="badges">${cardBadges(p)}</div>
+            <div class="overlay-title">
+              <div class="name">${escapeHtml(name)}</div>
+              <div class="flavor">${escapeHtml(flavor)}</div>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="meta-row">
+              <div class="price">${price.toLocaleString(state.lang==="hu"?"hu-HU":"en-US")} Ft</div>
+              <div class="stock">${escapeHtml(t("stock"))}: <b>${escapeHtml(stock)}</b></div>
+            </div>
+          </div>
+        </div>
       `;
+    }).join("");
 
-      hero.appendChild(img);
-      hero.appendChild(badges);
-      hero.appendChild(overlay);
+    grid.innerHTML = html;
+    state.renderedOnce = true;
+  }
 
-      const body = document.createElement("div");
-      body.className = "card-body";
+  function setupTopbar(){
+    const inp = $("#search");
+    if(inp){
+      inp.placeholder = t("search");
+      inp.value = state.q;
+      inp.oninput = () => {
+        state.q = inp.value || "";
+        renderGrid();
+      };
+    }
 
-      const meta = document.createElement("div");
-      meta.className = "meta-row";
-
-      const priceEl = document.createElement("div");
-      priceEl.className = "price";
-      priceEl.textContent = fmtFt(price);
-
-      const stockEl = document.createElement("div");
-      stockEl.className = "stock";
-      stockEl.innerHTML = `${t("stock")}: <b>${soon ? "—" : stockShown} ${soon ? "" : t("pcs")}</b>`;
-
-      meta.appendChild(priceEl);
-      meta.appendChild(stockEl);
-      body.appendChild(meta);
-
-      card.appendChild(hero);
-      card.appendChild(body);
-
-      if(featured){
-        const svg = document.createElementNS("http://www.w3.org/2000/svg","svg");
-        svg.classList.add("feat-border");
-        svg.setAttribute("viewBox","0 0 100 100");
-        svg.setAttribute("preserveAspectRatio","none");
-
-        const mk = (cls) => {
-          const r = document.createElementNS("http://www.w3.org/2000/svg","rect");
-          r.setAttribute("x","2");
-          r.setAttribute("y","2");
-          r.setAttribute("width","96");
-          r.setAttribute("height","96");
-          r.setAttribute("rx","18");
-          r.setAttribute("ry","18");
-          r.setAttribute("class", cls);
-          return r;
-        };
-
-        svg.appendChild(mk("seg top cw"));
-        svg.appendChild(mk("seg top ccw"));
-        svg.appendChild(mk("seg bot cw"));
-        svg.appendChild(mk("seg bot ccw"));
-
-        card.appendChild(svg);
-      }
-
-      grid.appendChild(card);
+    const btn = $("#langToggle");
+    if(btn){
+      btn.onclick = () => {
+        state.lang = (state.lang === "hu") ? "en" : "hu";
+        localStorage.setItem("sv_lang", state.lang);
+        // update UI texts
+        $("#search").placeholder = t("search");
+        renderNav();
+        renderGrid();
+      };
     }
   }
 
-  /* ----------------- Popups (New products) ----------------- */
-  function popupHideKey(pp){
-    const id = String(pp.id||"");
-    const rev = Number(pp.rev || pp.updatedAt || pp.createdAt || 0) || 0;
-    return `sv_popup_hide_${id}_${rev}`;
+  function readLang(){
+    const ls = localStorage.getItem("sv_lang");
+    if(ls === "en" || ls === "hu") state.lang = ls;
+    // try html lang
+    const h = document.documentElement.getAttribute("lang");
+    if(h === "en" || h === "hu") state.lang = h;
   }
 
-  function buildPopupQueue(){
-    const popups = (state.productsDoc.popups || []).filter(pp => pp && pp.id && (pp.enabled === false ? false : true));
-    // sort: newest first (admin list is newest first)
-    popups.sort((a,b)=>(Number(b.createdAt||0)-Number(a.createdAt||0)));
+  async function loadAll({forceBust=false}={}){
+    const [docRaw, salesRaw] = await Promise.allSettled([
+      fetchJson("data/products.json", {forceBust}),
+      fetchJson("data/sales.json", {forceBust}),
+    ]);
 
-    const products = (state.productsDoc.products || []).filter(p=>p && p.id && p.visible !== false);
-    const cats = (state.productsDoc.categories || []);
-
-    const queue = [];
-
-    for(const pp of popups){
-      // skip if user hid this rev
-      try{
-        if(localStorage.getItem(popupHideKey(pp)) === "1") continue;
-      }catch{}
-
-      // collect product ids
-      const ids = new Set();
-      for(const cid of (pp.categoryIds||[])){
-        for(const p of products){
-          if(String(p.categoryId) === String(cid)) ids.add(String(p.id));
-        }
-      }
-      for(const pid of (pp.productIds||[])){
-        ids.add(String(pid));
-      }
-
-      const picked = [...ids].map(id => products.find(p=>String(p.id)===String(id))).filter(Boolean);
-
-      // group by category
-      const byCat = new Map();
-      for(const p of picked){
-        const cid = String(p.categoryId||"");
-        if(!byCat.has(cid)) byCat.set(cid, []);
-        byCat.get(cid).push(p);
-      }
-
-      // sort categories by label
-      const catIds = [...byCat.keys()].sort((a,b)=>{
-        const ca = cats.find(x=>String(x.id)===String(a));
-        const cb = cats.find(x=>String(x.id)===String(b));
-        return catLabel(ca).localeCompare(catLabel(cb), locale());
-      });
-
-      if(!catIds.length) continue;
-
-      queue.push({
-        popup: pp,
-        categories: catIds.map(cid => ({
-          id: cid,
-          label: catLabel(cats.find(x=>String(x.id)===String(cid)) || {id:cid, label_hu:cid, label_en:cid}),
-          products: byCat.get(cid)
-            .slice()
-            .sort((a,b)=> norm(getFlavor(a)).localeCompare(norm(getFlavor(b)), locale()))
-        }))
-      });
+    let doc = state.doc;
+    if(docRaw.status === "fulfilled"){
+      doc = normalizeDoc(docRaw.value);
     }
 
-    return queue;
+    let sales = state.sales;
+    if(salesRaw.status === "fulfilled"){
+      const s = salesRaw.value;
+      sales = Array.isArray(s) ? s : (s && Array.isArray(s.sales) ? s.sales : []);
+    }
+
+    return { doc, sales };
   }
 
-  function showPopupsIfNeeded(){
+  function applyAll(doc, sales){
+    // signatures
+    const sigDoc = JSON.stringify(doc);
+    const sigSales = JSON.stringify(sales);
 
-    // inline popup style (nem nyúlunk a styles.css-hez, de legyen normális mindenhol)
+    const docChanged = sigDoc !== state.lastSigDoc;
+    const salesChanged = sigSales !== state.lastSigSales;
+
+    if(!docChanged && !salesChanged) return;
+
+    state.doc = doc;
+    state.sales = sales;
+
+    if(docChanged) state.lastSigDoc = sigDoc;
+    if(salesChanged) state.lastSigSales = sigSales;
+
+    computeFeaturedByCat();
+    renderNav();
+    renderGrid();
+
+    // popups only when doc changed (or if not open)
+    if(docChanged) maybeShowPopups();
+  }
+
+  function liveChannel(){
     try{
-      if(!document.getElementById("svPopupStyle")){
-        const st = document.createElement("style");
-        st.id = "svPopupStyle";
-        st.textContent = `
-          .popup-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.66);display:flex;align-items:center;justify-content:center;padding:18px;z-index:9999}
-          .popup-modal{width:min(760px,92vw);max-height:86vh;overflow:hidden;background:rgba(12,12,16,.96);border:1px solid rgba(255,255,255,.10);border-radius:22px;box-shadow:0 18px 70px rgba(0,0,0,.55);padding:16px 16px 14px;display:flex;flex-direction:column;gap:12px}
-          .popup-head,.popup-top{display:flex;flex-direction:column;gap:4px}
-          .popup-title{font-size:18px;font-weight:800;letter-spacing:.2px}
-          .popup-sub{font-size:13px;opacity:.75}
-          .popup-carousel{position:relative;overflow:hidden;border-radius:18px;border:1px solid rgba(255,255,255,.08)}
-          .popup-track{display:flex;transition:transform .35s ease;will-change:transform;transform:translate3d(0,0,0)}
-          .popup-item{flex:0 0 100%;display:flex;gap:12px;align-items:center;padding:12px;background:rgba(255,255,255,.02)}
-          .popup-img{width:104px;height:104px;border-radius:18px;overflow:hidden;background:rgba(255,255,255,.06);flex:0 0 auto}
-          .popup-img img{width:100%;height:100%;object-fit:cover;display:block}
-          .popup-info{display:flex;flex-direction:column;gap:6px;min-width:0}
-          .popup-name{font-weight:900;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-          .popup-flavor{font-size:13px;opacity:.8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-          .popup-meta{display:flex;flex-direction:column;gap:6px;min-width:0}
-          .popup-row{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;font-size:13px;opacity:.9}
-          .popup-price{font-weight:900}
-          .popup-stock{opacity:.85}
-          .popup-nav{display:flex;align-items:center;justify-content:space-between;gap:10px}
-          .popup-dots{font-size:12px;opacity:.75}
-          .popup-btns,.popup-bottom{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}
-          .popup-chk,.chk{display:flex;align-items:center;gap:8px;font-size:13px;opacity:.85;user-select:none}
-          .popup-actions{display:flex;gap:10px;align-items:center}
-          .popup-actions button{white-space:nowrap}
-        `;
-        document.head.appendChild(st);
-      }
+      const bc = new BroadcastChannel("sv_live");
+      bc.onmessage = (e) => {
+        const payload = e.data;
+        if(payload && payload.doc){
+          try{
+            applyAll(normalizeDoc(payload.doc), Array.isArray(payload.sales)?payload.sales:state.sales);
+          }catch{}
+        }
+      };
     }catch{}
-    const queue = buildPopupQueue();
-    if(!queue.length) return;
+    // localStorage fallback (same device)
+    window.addEventListener("storage", (e) => {
+      if(e.key === "sv_live_payload" && e.newValue){
+        try{
+          const payload = JSON.parse(e.newValue);
+          if(payload && payload.doc){
+            applyAll(normalizeDoc(payload.doc), Array.isArray(payload.sales)?payload.sales:state.sales);
+          }
+        }catch{}
+      }
+    });
+  }
 
-    // modal DOM
-    let bg = document.querySelector("#popupBg");
-    if(bg) bg.remove();
+  function isPopupDismissed(pu){
+    try{
+      const key = LS.popupDismissPrefix + pu.id + "_" + Number(pu.rev||0);
+      return localStorage.getItem(key) === "1";
+    }catch{
+      return false;
+    }
+  }
+  function dismissPopup(pu){
+    try{
+      const key = LS.popupDismissPrefix + pu.id + "_" + Number(pu.rev||0);
+      localStorage.setItem(key, "1");
+    }catch{}
+  }
 
-    bg = document.createElement("div");
-    bg.id = "popupBg";
-    bg.className = "popup-backdrop";
+  function popupProducts(pu){
+    const byId = new Map(state.doc.products.map(p => [p.id, p]));
+    const out = [];
+    const seen = new Set();
+
+    // categories first (sorted by label)
+    const cats = [...state.doc.categories].sort((a,b)=>catLabel(a).localeCompare(catLabel(b), loc()));
+    for(const c of cats){
+      if(!(pu.categoryIds||[]).includes(c.id)) continue;
+      const prods = state.doc.products
+        .filter(p => p.visible !== false && p.categoryId === c.id)
+        .sort((a,b)=>{
+          const fa = productFlavor(a), fb = productFlavor(b);
+          const cf = fa.localeCompare(fb, loc());
+          if(cf !== 0) return cf;
+          return productName(a).localeCompare(productName(b), loc());
+        });
+      for(const p of prods){
+        if(seen.has(p.id)) continue;
+        seen.add(p.id);
+        out.push(p);
+      }
+    }
+
+    // explicit products
+    for(const pid of (pu.productIds||[])){
+      const p = byId.get(pid);
+      if(!p) continue;
+      if(p.visible === false) continue;
+      if(seen.has(p.id)) continue;
+      seen.add(p.id);
+      out.push(p);
+    }
+
+    return out;
+  }
+
+  function ensurePopupStyles(){
+    if(document.getElementById("svPopupStyle")) return;
+    const st = document.createElement("style");
+    st.id = "svPopupStyle";
+    st.textContent = `
+      .sv-pop-bg{
+        position:fixed; inset:0;
+        background: rgba(0,0,0,.62);
+        display:flex; align-items:center; justify-content:center;
+        z-index:9999;
+        padding:18px;
+      }
+      .sv-pop{
+        width:min(980px, 96vw);
+        border-radius: 22px;
+        background: rgba(18,18,20,.94);
+        border: 1px solid rgba(255,255,255,.12);
+        box-shadow: 0 30px 80px rgba(0,0,0,.55);
+        overflow:hidden;
+        will-change: transform;
+      }
+      .sv-pop-head{
+        display:flex; align-items:center; justify-content:space-between;
+        padding:16px 16px 12px 16px;
+        border-bottom: 1px solid rgba(255,255,255,.08);
+      }
+      .sv-pop-title{
+        font-size: 16px;
+        font-weight: 900;
+        letter-spacing: .2px;
+      }
+      .sv-pop-sub{
+        font-size: 12px;
+        opacity: .75;
+        margin-top: 2px;
+      }
+      .sv-pop-close{
+        width: 36px; height: 36px;
+        border-radius: 12px;
+        border: 1px solid rgba(255,255,255,.14);
+        background: rgba(255,255,255,.06);
+        color: rgba(255,255,255,.92);
+        cursor:pointer;
+      }
+      .sv-pop-body{ padding: 14px 14px 0 14px; }
+
+      .sv-slider{
+        position: relative;
+        overflow: hidden;
+      }
+      .sv-track{
+        display:flex;
+        transition: transform 420ms ease;
+        will-change: transform;
+        transform: translate3d(0,0,0);
+      }
+      .sv-slide{
+        flex: 0 0 100%;
+        padding: 8px;
+      }
+      .sv-pop-foot{
+        display:flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        padding: 12px 14px 14px 14px;
+      }
+      .sv-pop-ctrl{
+        display:flex;
+        gap: 10px;
+        align-items:center;
+        flex-wrap:wrap;
+      }
+      .sv-pop-ctrl label{
+        display:flex;
+        align-items:center;
+        gap: 8px;
+        font-size: 12px;
+        opacity: .9;
+        user-select:none;
+      }
+      .sv-pop-btn{
+        border-radius: 14px;
+        padding: 10px 14px;
+        border: 1px solid rgba(255,255,255,.14);
+        background: rgba(255,255,255,.07);
+        color: rgba(255,255,255,.92);
+        cursor:pointer;
+        font-weight: 800;
+      }
+      .sv-pop-btn.primary{
+        background: rgba(124,92,255,.22);
+        border-color: rgba(124,92,255,.35);
+      }
+      .sv-counter{
+        font-size: 12px;
+        opacity: .72;
+      }
+      @media (max-width: 700px){
+        .sv-pop{ width: 98vw; }
+      }
+    `;
+    document.head.appendChild(st);
+  }
+
+  function maybeShowPopups(){
+    if(state.popupOpen) return;
+    const all = (state.doc.popups||[]).filter(p => p && p.enabled !== false);
+    if(!all.length) return;
+
+    const active = all.filter(p => !isPopupDismissed(p));
+    if(!active.length) return;
+
+    showPopups(active);
+  }
+
+  function showPopups(popups){
+    ensurePopupStyles();
+    state.popupOpen = true;
+
+    // sort stable: updatedAt desc, then title
+    const list = [...popups].sort((a,b)=>{
+      const ua = Number(a.updatedAt||0), ub = Number(b.updatedAt||0);
+      if(ua !== ub) return ub - ua;
+      return (a.title_hu||a.title_en||a.id).localeCompare((b.title_hu||b.title_en||b.id), loc());
+    });
+
+    let popupIndex = 0;
+    let autoTimer = null;
+
+    const bg = document.createElement("div");
+    bg.className = "sv-pop-bg";
 
     const modal = document.createElement("div");
-    modal.className = "popup-modal";
+    modal.className = "sv-pop";
     bg.appendChild(modal);
 
     document.body.appendChild(bg);
 
-    let popupIndex = 0;
-    let catIndex = 0;
-
-    let autoplayTimer = null;
-
-    const cleanupAutoplay = () => {
-      if(autoplayTimer) clearInterval(autoplayTimer);
-      autoplayTimer = null;
-    };
-
-    const closeAll = () => {
-      cleanupAutoplay();
+    function cleanup(){
+      try{ clearInterval(autoTimer); }catch{}
+      autoTimer = null;
       bg.remove();
-    };
+      state.popupOpen = false;
+    }
 
-    const render = () => {
-      cleanupAutoplay();
+    function buildCard(p){
+      const price = effectivePrice(p);
+      const name = productName(p);
+      const flavor = productFlavor(p);
+      const stock = (p.status === "soon") ? "—" : String(Math.max(0, p.stock||0));
+      const isOut = (p.status === "out") || (p.stock <= 0 && p.status !== "soon");
 
-      const cur = queue[popupIndex];
-      if(!cur){ closeAll(); return; }
+      const cls = [
+        "card",
+        (isOut ? "dim out" : (p.status==="soon" ? "soon" : "")),
+      ].join(" ");
 
-      const curCat = cur.categories[catIndex];
-      if(!curCat){
-        popupIndex += 1;
-        catIndex = 0;
-        render();
+      return `
+        <div class="${cls}" style="max-width:740px;margin:0 auto;">
+          <div class="hero">
+            <img src="${escapeHtml(p.image||"")}" alt="${escapeHtml(name)}">
+            <div class="badges">
+              ${p.status==="soon" ? `<span class="badge soon">${escapeHtml(t("coming"))}</span>` : ``}
+              ${isOut ? `<span class="badge out">${escapeHtml(t("soldout"))}</span>` : ``}
+            </div>
+            <div class="overlay-title">
+              <div class="name">${escapeHtml(name)}</div>
+              <div class="flavor">${escapeHtml(flavor)}</div>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="meta-row">
+              <div class="price">${price.toLocaleString(state.lang==="hu"?"hu-HU":"en-US")} Ft</div>
+              <div class="stock">${escapeHtml(t("stock"))}: <b>${escapeHtml(stock)}</b></div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderPopup(){
+      try{ clearInterval(autoTimer); }catch{}
+      autoTimer = null;
+
+      const pu = list[popupIndex];
+      const items = popupProducts(pu);
+      const totalPopups = list.length;
+
+      // if nothing to show, skip
+      if(!items.length){
+        popupIndex++;
+        if(popupIndex >= list.length) cleanup();
+        else renderPopup();
         return;
       }
 
-      const pp = cur.popup;
+      const title = (state.lang === "hu" ? (pu.title_hu||pu.title_en) : (pu.title_en||pu.title_hu)) || t("newTitle");
 
-      modal.innerHTML = "";
+      // slider clones
+      const realN = items.length;
+      const slides = (realN > 1)
+        ? [items[realN-1], ...items, items[0]]
+        : [...items];
 
-      const top = document.createElement("div");
-      top.className = "popup-top";
-      top.innerHTML = `
-        <div class="popup-title">${(state.lang==="en" ? (pp.title_en || t("newAvail")) : (pp.title_hu || t("newAvail")))}</div>
-        <div class="popup-sub">${curCat.label}</div>
+      let idx = (realN > 1) ? 1 : 0;
+
+      modal.innerHTML = `
+        <div class="sv-pop-head">
+          <div>
+            <div class="sv-pop-title">${escapeHtml(title)}</div>
+            <div class="sv-pop-sub">${escapeHtml(t("newTitle"))} • Popup ${popupIndex+1}/${totalPopups}</div>
+          </div>
+          <button class="sv-pop-close" id="svPopClose" aria-label="close">✕</button>
+        </div>
+
+        <div class="sv-pop-body">
+          <div class="sv-slider">
+            <div class="sv-track" id="svTrack">
+              ${slides.map(p => `<div class="sv-slide">${buildCard(p)}</div>`).join("")}
+            </div>
+          </div>
+        </div>
+
+        <div class="sv-pop-foot">
+          <div class="sv-pop-ctrl">
+            <label><input type="checkbox" id="svDont"> ${escapeHtml(t("dontShow"))}</label>
+            <div class="sv-counter" id="svCounter">${realN>0 ? `1/${realN}` : ``}</div>
+          </div>
+
+          <div class="sv-pop-ctrl">
+            ${totalPopups > 1 ? `<button class="sv-pop-btn" id="svSkipAll">${escapeHtml(t("skipAll"))}</button>` : ``}
+            <button class="sv-pop-btn primary" id="svOk">${escapeHtml(t("ok"))}</button>
+          </div>
+        </div>
       `;
 
-      const carousel = document.createElement("div");
-      carousel.className = "popup-carousel";
+      const track = modal.querySelector("#svTrack");
+      const counter = modal.querySelector("#svCounter");
 
-      const track = document.createElement("div");
-      track.className = "popup-track";
-      carousel.appendChild(track);
-
-      const items = Array.isArray(curCat.products) ? curCat.products : [];
-      if(!items.length){
-        catIndex += 1;
-        render();
-        return;
-      }
-      let real = 0; // 0..len-1
-      let idx = 0;  // track index (clones miatt)
-
-      const nav = document.createElement("div");
-      nav.className = "popup-nav";
-
-      const prev = document.createElement("button");
-      prev.className = "ghost";
-      prev.textContent = "‹";
-
-      const mid = document.createElement("div");
-      mid.className = "popup-dots";
-      function updateMid(){
-        mid.textContent = `${real+1}/${items.length}`;
-      }
-
-      const next = document.createElement("button");
-      next.className = "ghost";
-      next.textContent = "›";
-
-      nav.appendChild(prev);
-      nav.appendChild(mid);
-      nav.appendChild(next);
-
-      const setPos = (instant=false) => {
-        track.style.transition = instant ? "none" : "";
-        track.style.transform = `translate3d(${idx * -100}%,0,0)`;
-        if(instant){
-          requestAnimationFrame(()=>{ track.style.transition = ""; });
+      function setCounter(){
+        if(realN <= 1){
+          counter.textContent = `1/1`;
+          return;
         }
-      };
+        const realIdx = idx - 1; // 0..realN-1
+        counter.textContent = `${realIdx+1}/${realN}`;
+      }
 
-      const goNext = () => {
-        if(items.length <= 1) return;
+      function setPos(noAnim=false){
+        if(!track) return;
+        if(noAnim) track.style.transition = "none";
+        else track.style.transition = "transform 420ms ease";
+        track.style.transform = `translate3d(${-idx*100}%,0,0)`;
+        if(noAnim){
+          // force reflow
+          track.offsetHeight; // eslint-disable-line
+          track.style.transition = "transform 420ms ease";
+        }
+      }
+
+      // init
+      if(realN > 1) setPos(true);
+
+      function next(){
+        if(realN <= 1) return;
         idx += 1;
-        real = (real + 1) % items.length;
         setPos(false);
-        updateMid();
-      };
-
-      const goPrev = () => {
-        if(items.length <= 1) return;
-        idx -= 1;
-        real = (real - 1 + items.length) % items.length;
-        setPos(false);
-        updateMid();
-      };
-
-      prev.onclick = goPrev;
-      next.onclick = goNext;
-
-      const renderSlides = () => {
-        track.innerHTML = "";
-
-        const slides = [];
-        if(items.length <= 1){
-          slides.push(items[0]);
-          idx = 0;
-          real = 0;
-        }else{
-          // clone last + ...items + clone first (hogy balra "végtelenül" tudjon lapozni)
-          slides.push(items[items.length-1], ...items, items[0]);
-          idx = 1; // az első VALÓDI slide
-          real = 0;
-        }
-
-        for(const p of slides){
-          const card = document.createElement("div");
-          card.className = "popup-item";
-
-          card.innerHTML = `
-            <div class="popup-img"><img loading="lazy" decoding="async" src="${p.image || ""}" alt="${(getName(p)+" "+getFlavor(p)).trim()}"></div>
-            <div class="popup-meta">
-              <div class="popup-name">${getName(p)}</div>
-              <div class="popup-flavor">${getFlavor(p)}</div>
-              <div class="popup-row">
-                <div class="popup-price">${fmtFt(effectivePrice(p))}</div>
-                <div class="popup-stock">${t("stock")}: <b>${isSoon(p) ? "—" : (isOut(p)?0:Math.max(0, Number(p.stock||0)))} ${isSoon(p)?"":t("pcs")}</b></div>
-              </div>
-            </div>
-          `;
-          track.appendChild(card);
-        }
-
-        setPos(true);
-        updateMid();
-
-        // wrap reset: utolsó->első ne "vissza" animáljon, hanem menjen tovább ugyanabba az irányba
-        track.addEventListener("transitionend", () => {
-          if(items.length <= 1) return;
-          if(idx === 0){
-            idx = items.length;
-            setPos(true);
-          }else if(idx === items.length + 1){
-            idx = 1;
-            setPos(true);
-          }
-        }, { once:false });
-      };
-
-      renderSlides();
-
-      if(items.length > 1){
-        autoplayTimer = setInterval(() => {
-          goNext();
-        }, 3200);
+        setCounter();
       }
-const bottom = document.createElement("div");
-      bottom.className = "popup-bottom";
 
-      const dont = document.createElement("label");
-      dont.className = "chk";
-      dont.innerHTML = `<input type="checkbox" id="ppDont"> ${t("dontShow")}`;
+      const onEnd = () => {
+        if(realN <= 1) return;
+        if(idx === slides.length - 1){
+          // at clone of first -> jump to first real (idx=1)
+          idx = 1;
+          setPos(true);
+          setCounter();
+        }
+      };
 
-      let btnSkip = null;
-      if(queue.length > 1){
-        btnSkip = document.createElement("button");
-        btnSkip.className = "ghost";
-        btnSkip.textContent = t("skipAll");
-        btnSkip.onclick = () => {
-          // ha be van pipálva a "Ne mutasd többször", akkor az ÖSSZES aktív popup-ot elrejtjük erre a rev-re
-          const chk = modal.querySelector("#ppDont");
-          if(chk && chk.checked){
-            for(const q of queue){
-              try{ localStorage.setItem(popupHideKey(q.popup), "1"); }catch{}
-            }
+      track.addEventListener("transitionend", onEnd, { once:false });
+
+      // autoplay (jobbrol-balra mindig)
+      if(realN > 1){
+        autoTimer = setInterval(next, 2600);
+      }
+      setCounter();
+
+      const closeBtn = modal.querySelector("#svPopClose");
+      const okBtn = modal.querySelector("#svOk");
+      const skipBtn = modal.querySelector("#svSkipAll");
+      const dont = modal.querySelector("#svDont");
+
+      function proceed({dismissAll=false}={}){
+        const dontShow = !!dont.checked;
+
+        if(dismissAll && dontShow){
+          for(const p of list){
+            dismissPopup(p);
           }
-          closeAll();
+        }else if(dontShow){
+          dismissPopup(pu);
+        }
+
+        popupIndex++;
+        if(popupIndex >= list.length){
+          cleanup();
+        }else{
+          renderPopup();
+        }
+      }
+
+      closeBtn.onclick = () => proceed({dismissAll:false});
+      okBtn.onclick = () => proceed({dismissAll:false});
+      if(skipBtn){
+        skipBtn.onclick = () => {
+          // ha be van pipálva, mindet dismisseljük
+          if(dont.checked){
+            for(const p of list) dismissPopup(p);
+          }
+          cleanup();
         };
       }
 
-      
-      const btnOk = document.createElement("button");
-      btnOk.className = "primary";
-      btnOk.textContent = t("understood");
-      btnOk.onclick = () => {
-        const chk = modal.querySelector("#ppDont");
-        if(chk && chk.checked){
-          try{ localStorage.setItem(popupHideKey(pp), "1"); }catch{}
-        }
-        catIndex += 1;
-        render();
+      // backdrop click: close current (no dismiss)
+      bg.onclick = (e) => {
+        if(e.target === bg) proceed({dismissAll:false});
       };
-
-      bottom.appendChild(dont);
-      if(btnSkip) bottom.appendChild(btnSkip);
-      bottom.appendChild(btnOk);
-
-      modal.appendChild(top);
-      modal.appendChild(carousel);
-      if(items.length > 1) modal.appendChild(nav);
-      modal.appendChild(bottom);
-    };
-
-    // click outside closes current popup stack? better: do nothing to avoid accidental
-    bg.addEventListener("click", (e) => {
-      if(e.target === bg){
-        // same as skip all (no hide)
-        closeAll();
-      }
-    });
-
-    render();
-  }
-
-  /* ----------------- Init ----------------- */
-  function setLangUI(){
-    $("#langLabel").textContent = state.lang.toUpperCase();
-    $("#search").placeholder = state.lang === "en" ? "Search..." : "Keresés...";
-  }
-
-  function initLang(){
-    $("#langBtn").onclick = () => {
-      state.lang = state.lang === "hu" ? "en" : "hu";
-      localStorage.setItem("sv_lang", state.lang);
-      setLangUI();
-      renderNav();
-      renderGrid();
-      // popups szöveg is nyelv függő – újrarender
-      showPopupsIfNeeded();
-    };
-  }
-
-  function hydrateFromLivePayload(){
-    try{
-      const raw = localStorage.getItem("sv_live_payload");
-      if(!raw) return false;
-      const payload = JSON.parse(raw);
-      if(!payload || !payload.doc) return false;
-
-      // csak friss live payloadot fogadjunk el (különben régi eladások / termékek ragadhatnak be)
-      const ts = Number(payload.ts || 0) || 0;
-      if(!ts || (Date.now() - ts) > 120_000) return false;
-
-      const docChanged = applyDocIfNewer(payload.doc, { source: "live" });
-
-      // sales: csak akkor frissnek tekintjük, ha a payload tényleg mostani
-      const salesChanged = applySalesIfChanged(normalizeSales(payload.sales || []), { fresh:true });
-
-      if(docChanged || salesChanged){
-        computeFeaturedByCategory();
-      }
-      return (docChanged || salesChanged);
-    }catch{ return false; }
-  }
-
-  async function loadAll({ forceBust=false } = {}){
-    let changed = false;
-
-    // 📌 gyors frissítés telefonon is: sales-t agresszívan bustoljuk amikor látszik az oldal,
-    // mert a "felkapott" csak abból tud frissülni.
-    const salesBust = forceBust || !document.hidden;
-    const prodBust = forceBust;
-
-    const [docRes, salesRes] = await Promise.allSettled([
-      fetchProducts({ forceBust: prodBust }),
-      fetchSales({ forceBust: salesBust })
-    ]);
-
-    if(docRes.status === "fulfilled" && docRes.value){
-      const docChanged = applyDocIfNewer(docRes.value, { source: "net" });
-      if(docChanged) changed = true;
     }
 
-    if(salesRes.status === "fulfilled"){
-      const sChanged = applySalesIfChanged(normalizeSales(salesRes.value || []), { fresh:true });
-      if(sChanged) changed = true;
-    }else{
-      // ha nem tudjuk biztosan betölteni, ne jelenítsünk meg felkapottat
-      state.salesFresh = false;
-    }
-
-    if(changed || !state.salesFresh){
-      computeFeaturedByCategory();
-    }
-
-    return changed;
+    renderPopup();
   }
 
-  async function init() {
+  async function init(){
     applySyncParams();
-    setLangUI();
-    initLang();
+    readLang();
+    setupTopbar();
+    liveChannel();
 
-    // if admin pushed live payload (same browser) use it first
-    hydrateFromLivePayload();
-
-    // load from network (RAW) to be sure
-    await loadAll({ forceBust:true });
-
-    renderNav();
-    renderGrid();
-
-    // show app
-    $("#loader").style.display = "none";
-    $("#app").style.display = "grid";
-
-    // popups
-    showPopupsIfNeeded();
-
-    // live updates from admin (same browser)
+    // init load (force bust)
     try{
-      const bc = new BroadcastChannel("sv_live");
-      bc.onmessage = (e) => {
-        try{
-          if(!e.data) return;
+      const { doc, sales } = await loadAll({forceBust:true});
+      applyAll(doc, sales);
+    }catch(e){
+      console.error(e);
+    }
 
-          let changed = false;
-          if(e.data.doc){
-            changed = applyDocIfNewer(e.data.doc, { source:"live" }) || changed;
-          }
-          if("sales" in e.data){
-            // admin mentés után ez friss
-            changed = applySalesIfChanged(normalizeSales(e.data.sales || []), { fresh:true }) || changed;
-          }
-          if(changed){
-            computeFeaturedByCategory();
-            renderNav();
-            renderGrid();
-            showPopupsIfNeeded();
-          }
-        }catch{}
-      };
-    }catch{}
+    // fast poll while visible; slower when hidden
+    let activeMs = 1000;
+    let idleMs = 8000;
+    let timer = null;
 
-    // polling (light)
-    const loop = async () => {
+    const tick = async () => {
+      const visible = document.visibilityState === "visible";
       try{
-        const changed = await loadAll({ forceBust:false });
-        if(changed){
-          renderNav();
-          renderGrid();
-          showPopupsIfNeeded();
-        }
+        const { doc, sales } = await loadAll({forceBust: visible});
+        applyAll(doc, sales);
       }catch{}
-      setTimeout(loop, document.hidden ? 25_000 : 9_000);
+      timer = setTimeout(tick, visible ? activeMs : idleMs);
     };
+    timer = setTimeout(tick, 1000);
 
+    // burst on focus/visibility change (1-2mp refresh)
+    const burst = async () => {
+      try{
+        const { doc, sales } = await loadAll({forceBust:true});
+        applyAll(doc, sales);
+      }catch{}
+    };
+    window.addEventListener("focus", burst);
     document.addEventListener("visibilitychange", () => {
-      if (!document.hidden) loadAll({ forceBust:true }).then((changed)=>{ if(changed){ renderNav(); renderGrid(); } showPopupsIfNeeded(); }).catch(()=>{});
+      if(document.visibilityState === "visible") burst();
     });
-
-    loop();
   }
 
-  init().catch((err) => {
-    console.error(err);
-    $("#loaderText").textContent =
-      "Betöltési hiba. (Nyisd meg a konzolt.) Ha telefonon vagy ...vagy: nyisd meg egyszer a Sync linket az admin Beállításokból.";
-  });
+  // DOM ready
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", init);
+  }else{
+    init();
+  }
 })();
