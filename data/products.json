@@ -4,6 +4,7 @@
       "id": "elf30",
       "label_hu": "Elfbar Ice King 30k",
       "label_en": "Elfbar Ice King 30k",
+      "featuredEnabled": true,
       "basePrice": 6000
     }
   ],
@@ -15,6 +16,7 @@
       "stock": 3,
       "price": null,
       "image": "https://media.discordapp.net/attachments/1281700323081326743/1453178739029704795/Grape_ice_bg_removed_correct.png?ex=694c81aa&is=694b302a&hm=a586e9147b1210fcf4d16a251a30564840fa6de0b72a5262be3fcfbedb02496c&=&format=webp&quality=lossless&width=960&height=960",
+      "visible": true,
       "name_hu": "Elfbar Ice King 30k",
       "name_en": "Elfbar Ice King 30k",
       "flavor_hu": "Szőlő Jég",
@@ -27,6 +29,7 @@
       "stock": 5,
       "price": null,
       "image": "https://media.discordapp.net/attachments/1281700323081326743/1453180818523426856/BlueRazz_no_bg.png?ex=694c8399&is=694b3219&hm=185c8a82ce2730c9ff27c89f232fd230a8107ae263efb4b5494af1d72fcbf8f9&=&format=webp&quality=lossless&width=960&height=960",
+      "visible": true,
       "name_hu": "Elfbar Ice King 30k",
       "name_en": "Elfbar Ice King 30k",
       "flavor_hu": "Kék Málna",
@@ -39,6 +42,7 @@
       "stock": 8,
       "price": null,
       "image": "https://media.discordapp.net/attachments/1281700323081326743/1453190144839516222/Pink_lemonade_no_bg.png?ex=694c8c49&is=694b3ac9&hm=63503e3524f640c02cbbb5587c1406102ddfced5a682fe24019ebf4a87938f28&=&format=webp&quality=lossless&width=856&height=856",
+      "visible": true,
       "name_hu": "Elfbar Ice King 30k",
       "name_en": "Elfbar Ice King 30k",
       "flavor_hu": "Pink Limonádé",
@@ -51,6 +55,7 @@
       "stock": 8,
       "price": null,
       "image": "https://media.discordapp.net/attachments/1281700323081326743/1453190144348786779/Polar_mint_no_bg.png?ex=694c8c49&is=694b3ac9&hm=5a28ae29b489e34a34c96a23913f2a7bbf8380a5c4d924b59d565ed1b2969cdf&=&format=webp&quality=lossless&width=856&height=856",
+      "visible": true,
       "name_hu": "Elfbar Ice King 30k",
       "name_en": "Elfbar Ice King 30k",
       "flavor_hu": "Miami Menta",
@@ -63,6 +68,7 @@
       "stock": 4,
       "price": null,
       "image": "https://media.discordapp.net/attachments/1281700323081326743/1453206184701067396/Elf_bull_no_bg.png?ex=694c9b39&is=694b49b9&hm=d0f47e28607aa6a4a9bb555fc0397c534ff457439fccd6e901abe8690a8447fe&=&format=webp&quality=lossless&width=960&height=960",
+      "visible": true,
       "name_hu": "Elfbar Ice King 30k",
       "name_en": "Elfbar Ice King 30k",
       "flavor_hu": "Red Bull",
@@ -75,10 +81,27 @@
       "stock": 3,
       "price": null,
       "image": "https://media.discordapp.net/attachments/1281700323081326743/1453206649123770480/Lime_cola_no_bg.png?ex=694c9ba8&is=694b4a28&hm=08623dad30f97a9c7fb0fb90a916a20060fee4f8881161be43a5345ec75f8f38&=&format=webp&quality=lossless&width=960&height=960",
+      "visible": true,
       "name_hu": "Elfbar Ice King 30k",
       "name_en": "Elfbar Ice King 30k",
       "flavor_hu": "Lime Kóla",
       "flavor_en": "Lime Cola"
     }
-  ]
+  ],
+  "popups": [
+    {
+      "id": "pu_7bed00a989548_19b52617e74",
+      "enabled": true,
+      "rev": 1766613807935,
+      "title_hu": "",
+      "title_en": "",
+      "categoryIds": [
+        "elf30"
+      ],
+      "productIds": [],
+      "createdAt": 1766613679732,
+      "updatedAt": 1766613807935
+    }
+  ],
+  "updatedAt": 1766613808259
 }
