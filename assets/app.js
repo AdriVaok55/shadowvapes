@@ -5,7 +5,8 @@
     lang: localStorage.getItem("sv_lang") || "hu",
     active: "all",
     productsDoc: { categories: [], products: [] },
-    search: ""
+    search: "",
+    etags: { products: "" }
   };
 
   const UI = { all:"Összes termék", soon:"Hamarosan", stock:"Készlet", pcs:"db", out:"Elfogyott" };
@@ -34,27 +35,73 @@ function getOwnerRepoCfg(){
     return { owner, repo, branch: branch || null, token: token || null };
   }
 
-  async function fetchJsonSmart(path){
-    // 1) raw github main/master (gyorsabb mint pages cache)
-    const or = getOwnerRepoFromUrl() || getOwnerRepoCfg();
-    const ts = Date.now();
-    if(or){
-      const branches = [or.branch, "main", "master", "gh-pages"].filter(Boolean).filter((v,i,a)=>a.indexOf(v)===i);
-      for(const br of branches){
-        const raw = `https://raw.githubusercontent.com/${or.owner}/${or.repo}/${br}/${path}?v=${ts}`;
-        try{
-          const r = await fetch(raw, { cache:"no-store" });
-          if(r.ok) return await r.json();
-        }catch{}
-      }
+
+// resolved GitHub source (hogy ne próbálgassunk branch-eket minden pollnál)
+let source = null; // {owner, repo, branch}
+
+async function resolveSource(){
+  if(source) return source;
+
+  try{
+    const cached = JSON.parse(localStorage.getItem("sv_source") || "null");
+    if(cached && cached.owner && cached.repo && cached.branch){
+      source = cached;
+      return source;
     }
-    // 2) fallback relative
-    const rel = `${path}?v=${ts}`;
-    const r2 = await fetch(rel, { cache:"no-store" });
-    if(!r2.ok) throw new Error(`Nem tudtam betölteni: ${path}`);
-    return await r2.json();
+  }catch{}
+
+  const or = getOwnerRepoFromUrl() || getOwnerRepoCfg();
+  if(!or) return null;
+
+  const branches = [or.branch, "main", "master", "gh-pages"]
+    .filter(Boolean)
+    .filter((v,i,a)=>a.indexOf(v)===i);
+
+  for(const br of branches){
+    const testUrl = `https://raw.githubusercontent.com/${or.owner}/${or.repo}/${br}/data/products.json`;
+    try{
+      const r = await fetch(testUrl, { cache:"no-cache" });
+      if(r.ok){
+        source = { owner: or.owner, repo: or.repo, branch: br };
+        try{ localStorage.setItem("sv_source", JSON.stringify(source)); }catch{}
+        return source;
+      }
+    }catch{}
+  }
+  return null;
+}
+
+
+async function fetchJsonSmart(path, etagKey){
+  const src = await resolveSource();
+  const url = src
+    ? `https://raw.githubusercontent.com/${src.owner}/${src.repo}/${src.branch}/${path}`
+    : `${path}`;
+
+  const headers = {};
+  if(etagKey){
+    const et = (state.etags && state.etags[etagKey]) ? state.etags[etagKey] : "";
+    if(et) headers["If-None-Match"] = et;
+    headers["Cache-Control"] = "no-cache";
+    headers["Pragma"] = "no-cache";
   }
 
+  const r = await fetch(url, { cache: "no-cache", headers });
+  if(r.status === 304) return { notModified: true };
+
+  if(!r.ok){
+    throw new Error(`Nem tudtam betölteni: ${path}`);
+  }
+
+  if(etagKey){
+    const et = r.headers.get("ETag");
+    if(et){
+      state.etags[etagKey] = et;
+    }
+  }
+
+  return { notModified: false, json: await r.json() };
+}
   function getName(p){
     return (p.name_hu || p.name_en || p.name || "");
   }
@@ -209,9 +256,9 @@ function getOwnerRepoCfg(){
       img.src = p.image || "";
       // státusz alapú szürkeség (CSS nélkül)
       if(out){
-        img.style.filter = "grayscale(1) brightness(0.40) contrast(0.95)";
+        img.style.filter = "grayscale(1) brightness(0.32) contrast(0.95)";
       }else if(p.status === "soon"){
-        img.style.filter = "grayscale(1) brightness(0.62) contrast(0.98)";
+        img.style.filter = "grayscale(1) brightness(0.70) contrast(0.98)";
       }
       hero.appendChild(img);
 
@@ -239,8 +286,8 @@ function getOwnerRepoCfg(){
       f.className = "flavor";
       f.textContent = flavor || "";
       // olvashatóság (CSS nélkül)
-      f.style.fontSize = "15px";
-      f.style.opacity = "0.92";
+      f.style.fontSize = "16.5px";
+      f.style.opacity = "0.96";
       f.style.letterSpacing = "0.2px";
       ov.appendChild(n);
       ov.appendChild(f);
@@ -260,10 +307,10 @@ function getOwnerRepoCfg(){
       const stockEl = document.createElement("div");
       stockEl.className = "stock";
       stockEl.innerHTML = `${t("stock")}: <b>${p.status === "soon" ? "—" : stockShown}</b> ${p.status === "soon" ? "" : t("pcs")}`;
-      stockEl.style.fontSize = "13.5px";
-      stockEl.style.opacity = "0.90";
+      stockEl.style.fontSize = "14.5px";
+      stockEl.style.opacity = "0.96";
       const sb = stockEl.querySelector("b");
-      if(sb){ sb.style.fontSize = "14px"; sb.style.opacity = "0.98"; }
+      if(sb){ sb.style.fontSize = "15.5px"; sb.style.opacity = "1"; }
 
       meta.appendChild(priceEl);
       meta.appendChild(stockEl);
@@ -321,7 +368,8 @@ function getOwnerRepoCfg(){
     });
 
     $("#loaderText").textContent = "Termékek betöltése...";
-    const data = await fetchJsonSmart("data/products.json");
+    const resp0 = await fetchJsonSmart("data/products.json", "products");
+    const data = resp0.json;
     if(Array.isArray(data)){
       state.productsDoc = { categories: [], products: data };
     }else{
@@ -343,25 +391,29 @@ function getOwnerRepoCfg(){
     renderGrid();
 
     // ✅ másik eszközön is gyors frissülés (könnyű poll, no cache)
-    setInterval(async () => {
-      if(document.hidden) return;
-      try{
-        const fresh = await fetchJsonSmart("data/products.json");
-        const doc = Array.isArray(fresh)
-          ? { categories: [], products: fresh }
-          : {
-              categories: Array.isArray(fresh.categories) ? fresh.categories : [],
-              products: Array.isArray(fresh.products) ? fresh.products : []
-            };
-        const sig = JSON.stringify(doc);
-        if(sig && sig !== lastSig){
-          lastSig = sig;
-          state.productsDoc = doc;
-          renderNav();
-          renderGrid();
-        }
-      }catch{}
-    }, 8000);
+
+setInterval(async () => {
+  if(document.hidden) return;
+  try{
+    const resp = await fetchJsonSmart("data/products.json", "products");
+    if(resp.notModified) return;
+
+    const fresh = resp.json;
+    const doc = Array.isArray(fresh)
+      ? { categories: [], products: fresh }
+      : {
+          categories: Array.isArray(fresh.categories) ? fresh.categories : [],
+          products: Array.isArray(fresh.products) ? fresh.products : []
+        };
+    const sig = JSON.stringify(doc);
+    if(sig && sig !== lastSig){
+      lastSig = sig;
+      state.productsDoc = doc;
+      renderNav();
+      renderGrid();
+    }
+  }catch{}
+}, 1500);
 
     $("#loader").style.display = "none";
     $("#app").style.display = "grid";

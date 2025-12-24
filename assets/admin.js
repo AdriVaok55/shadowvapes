@@ -15,6 +15,8 @@
     saving: false,
     saveQueued: false,
     dirty: false,
+    dirtyProducts: false,
+    dirtySales: false,
     saveTimer: null,
     shas: { products: null, sales: null },
     clientId: (globalThis.crypto && crypto.randomUUID) ? crypto.randomUUID() : (Date.now().toString(36) + Math.random().toString(36).slice(2)),
@@ -289,51 +291,75 @@
     const productsText = JSON.stringify(state.doc, null, 2);
     const salesText = JSON.stringify(state.sales, null, 2);
 
-    let ok = false;
-    try{      // Mindig friss SHA-val mentsünk (branch váltás / másik eszköz mentése miatt)
-      const [pOld, sOld] = await Promise.all([
-        ShadowGH.getFile({ token: cfg.token, owner: cfg.owner, repo: cfg.repo, branch: cfg.branch, path: "data/products.json" }),
-        ShadowGH.getFile({ token: cfg.token, owner: cfg.owner, repo: cfg.repo, branch: cfg.branch, path: "data/sales.json" }),
-      ]);
-      state.shas.products = pOld.sha;
-      state.shas.sales = sOld.sha;
+    
+let ok = false;
+const wantProducts = !!(state.dirtyProducts || state.dirtySales);
+const wantSales = !!state.dirtySales;
 
-      const pRes = await ShadowGH.putFileSafe({
+try{
+  // SHA csak akkor kell, ha még nincs meg (a putFileSafe úgyis frissít konflikt esetén)
+  if(wantProducts && !state.shas.products){
+    const pOld = await ShadowGH.getFile({ token: cfg.token, owner: cfg.owner, repo: cfg.repo, branch: cfg.branch, path: "data/products.json" });
+    state.shas.products = pOld.sha;
+  }
+  if(wantSales && !state.shas.sales){
+    const sOld = await ShadowGH.getFile({ token: cfg.token, owner: cfg.owner, repo: cfg.repo, branch: cfg.branch, path: "data/sales.json" });
+    state.shas.sales = sOld.sha;
+  }
+
+  const tasks = [];
+
+  if(wantProducts){
+    tasks.push(
+      ShadowGH.putFileSafe({
         token: cfg.token, owner: cfg.owner, repo: cfg.repo, branch: cfg.branch,
         path: "data/products.json",
         message: "Update products.json",
         content: productsText,
         sha: state.shas.products
-      });
-      state.shas.products = pRes?.content?.sha || state.shas.products;
+      }).then((pRes) => {
+        state.shas.products = pRes?.content?.sha || state.shas.products;
+      })
+    );
+  }
 
-      const sRes = await ShadowGH.putFileSafe({
+  if(wantSales){
+    tasks.push(
+      ShadowGH.putFileSafe({
         token: cfg.token, owner: cfg.owner, repo: cfg.repo, branch: cfg.branch,
         path: "data/sales.json",
         message: "Update sales.json",
         content: salesText,
         sha: state.shas.sales
-      });
-      state.shas.sales = sRes?.content?.sha || state.shas.sales;
+      }).then((sRes) => {
+        state.shas.sales = sRes?.content?.sha || state.shas.sales;
+      })
+    );
+  }
 
-      ok = true;
+  // ha nincs mit menteni, ne üssük a GH-t
+  if(!tasks.length){
+    ok = true;
+    setSaveStatus("ok","Nincs változás");
+    return;
+  }
 
-      // ✅ azonnali update a katalógus tabnak (ha nyitva van ugyanabban a böngészőben)
-      try{
-        const payload = { doc: state.doc, sales: state.sales, ts: Date.now() };
-        localStorage.setItem("sv_live_payload", JSON.stringify(payload));
-        try{ new BroadcastChannel("sv_live").postMessage(payload); }catch{}
-      }catch{}
+  await Promise.all(tasks);
+  ok = true;
 
-      // ✅ mentés után automatikus újratöltés
-      const rr = await tryLoadFromGithub(cfg);
-      if(rr.ok){
-        setSaveStatus("ok","Mentve ✅");
-        renderAll();
-      }else{
-        setSaveStatus("ok","Mentve ✅ (reload hiba)");
-      }
-    }catch(e){
+  // ✅ azonnali update a katalógus tabnak (ha nyitva van ugyanabban a böngészőben)
+  try{
+    const payload = { doc: state.doc, sales: state.sales, ts: Date.now() };
+    localStorage.setItem("sv_live_payload", JSON.stringify(payload));
+    try{ new BroadcastChannel("sv_live").postMessage(payload); }catch{}
+  }catch{}
+
+  // ✅ ne reloadoljunk minden autosave után (lassú) — a state már friss
+  state.dirtyProducts = false;
+  state.dirtySales = false;
+
+  setSaveStatus("ok","Mentve ✅");
+}catch(e){
       console.error(e);
       setSaveStatus("bad", `Mentés hiba: ${String(e?.message || e)}`);
       // hagyjuk dirty-n, de nem loopolunk végtelenbe
@@ -351,6 +377,14 @@
     }
   }
 
+
+function markDirty(flags){
+  const f = flags || {};
+  if(f.products) state.dirtyProducts = true;
+  if(f.sales) state.dirtySales = true;
+  queueAutoSave();
+}
+
   function queueAutoSave(){
     state.dirty = true;
     if(state.saving){
@@ -362,7 +396,7 @@
     setSaveStatus("busy","Változás…");
     state.saveTimer = setTimeout(() => {
       saveDataNow();
-    }, 650);
+    }, 320);
   }
 
   /* ---------- Rendering ---------- */
@@ -461,7 +495,7 @@
           });
           closeModal();
           renderAll();
-          queueAutoSave();
+          markDirty({ products:true });
         }}
       ]);
     };
@@ -474,7 +508,7 @@
         if(!c) return;
         if(k === "basePrice") c.basePrice = Math.max(0, Number(inp.value||0));
         else c[k] = inp.value;
-        queueAutoSave();
+        markDirty({ products:true });
       });
     });
 
@@ -485,7 +519,7 @@
         if(state.doc.products.some(p => p.categoryId === id)) return;
         state.doc.categories = state.doc.categories.filter(c => c.id !== id);
         renderAll();
-        queueAutoSave();
+        markDirty({ products:true });
       };
     });
   }
@@ -572,7 +606,7 @@
         else if(k === "status") p.status = el.value;
         else if(k === "categoryId") p.categoryId = el.value;
 
-        queueAutoSave();
+        markDirty({ products:true });
       });
       el.addEventListener("change", () => {
         const pid = el.dataset.pid;
@@ -581,7 +615,7 @@
         if(!p) return;
         if(k === "status") p.status = el.value;
         if(k === "categoryId") p.categoryId = el.value;
-        queueAutoSave();
+        markDirty({ products:true });
       });
     });
 
@@ -595,7 +629,7 @@
         if(state.sales.some(s => s.items.some(it => it.productId === id))) return;
         state.doc.products = state.doc.products.filter(p => p.id !== id);
         renderAll();
-        queueAutoSave();
+        markDirty({ products:true });
       };
     });
   }
@@ -669,7 +703,7 @@
         }
         closeModal();
         renderAll();
-        queueAutoSave();
+        markDirty({ products:true });
       }}
     ]);
 
@@ -849,7 +883,7 @@
 
         closeModal();
         renderAll();
-        queueAutoSave();
+        markDirty({ products:true, sales:true });
       }}
     ]);
   }
@@ -903,7 +937,7 @@
 
     state.sales.splice(idx, 1);
     renderAll();
-    queueAutoSave();
+    markDirty({ products:true, sales:true });
   }
 
   function renderChartPanel(){
@@ -914,7 +948,7 @@
         <select id="chartCat">
           ${cats.map(c => `<option value="${escapeHtml(c.id)}"${c.id===state.filters.chartCat?" selected":""}>${escapeHtml(c.label)}</option>`).join("")}
         </select>
-        <div class="small-muted">Kategória szűrésnél csak az adott kategória tételeit számolja.</div>
+        <div class="small-muted">Csak bevétel (Ft), napra bontva. Kategória szűrésnél csak az adott kategória tételeit számolja.</div>
       </div>
 
       <div class="kpi" style="margin-top:12px;" id="chartKpi"></div>
@@ -927,124 +961,123 @@
     $("#chartCat").onchange = () => { state.filters.chartCat = $("#chartCat").value; drawChart(); };
   }
 
-  function drawChart(){
-    const canvas = $("#revCanvas");
-    if(!canvas) return;
+
+function drawChart(){
+  const canvas = $("#revCanvas");
+  const kpi = $("#chartKpi");
+  if(!canvas) return;
+
+  try{
+    const rect = canvas.getBoundingClientRect();
+    const cssW = Math.max(520, Math.floor(rect.width || 1100));
+    const cssH = Math.max(260, Math.floor(rect.height || 360));
+    const dpr = window.devicePixelRatio || 1;
+
+    canvas.width = Math.floor(cssW * dpr);
+    canvas.height = Math.floor(cssH * dpr);
+
     const ctx = canvas.getContext("2d");
-    ctx.clearRect(0,0,canvas.width,canvas.height);
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    ctx.clearRect(0,0,cssW,cssH);
 
     const cat = state.filters.chartCat;
 
-    // group by date
-    const map = new Map(); // date => {rev, cnt, qty}
+    // group by date => revenue
+    const map = new Map();
+    let total = 0;
     for(const s of state.sales){
       const st = saleTotals(s, cat);
       if(cat !== "all" && !st.hit) continue;
+
       const d = String(s.date || "");
       if(!d) continue;
-      if(!map.has(d)) map.set(d, { rev:0, cnt:0, qty:0 });
-      const obj = map.get(d);
-      obj.rev += Number(st.revenue||0);
-      obj.cnt += 1;
-      obj.qty += Number(st.qty||0);
+
+      const rev = Number(st.revenue || 0);
+      if(!Number.isFinite(rev)) continue;
+
+      map.set(d, (map.get(d) || 0) + rev);
+      total += rev;
     }
 
     const days = [...map.keys()].sort();
-    const revs = days.map(d => map.get(d).rev);
-    const cnts = days.map(d => map.get(d).cnt);
-    const labels = days.map(d => d.slice(5)); // MM-DD
+    const revs = days.map(d => Number(map.get(d) || 0));
+    const labels = days.map(d => d); // teljes dátum
+
+    if(kpi){
+      kpi.innerHTML = `<div class="small-muted">Összes bevétel: <b>${total.toLocaleString("hu-HU")} Ft</b> • Napok: <b>${days.length}</b></div>`;
+    }
 
     // grid
-    ctx.strokeStyle = "rgba(255,255,255,.08)";
+    ctx.strokeStyle = "rgba(255,255,255,.10)";
     ctx.lineWidth = 1;
-    for(let i=0;i<6;i++){
-      const y = 50 + i*50;
-      ctx.beginPath(); ctx.moveTo(40,y); ctx.lineTo(canvas.width-20,y); ctx.stroke();
+
+    const left = 96, right = cssW - 18, top = 18, bottom = cssH - 46;
+    const w = right - left;
+    const h = bottom - top;
+
+    for(let i=0;i<=5;i++){
+      const y = top + (i/5)*h;
+      ctx.beginPath(); ctx.moveTo(left,y); ctx.lineTo(right,y); ctx.stroke();
     }
 
     if(!days.length){
-      ctx.fillStyle = "rgba(255,255,255,.55)";
+      ctx.fillStyle = "rgba(255,255,255,.65)";
       ctx.font = "16px ui-sans-serif, system-ui";
-      ctx.fillText("Nincs adat a diagrammhoz.", 60, 90);
+      ctx.fillText("Nincs adat a diagrammhoz.", left, top + 28);
       return;
     }
 
     const maxRev = Math.max(...revs, 1);
-    const maxCnt = Math.max(...cnts, 1);
 
-    const left = 70, right = canvas.width - 70, top = 24, bottom = canvas.height - 48;
-    const w = right - left;
-    const h = bottom - top;
-
-    // axes + ticks
-    const ticks = 5;
-    ctx.font = "12px ui-sans-serif, system-ui";
-    for(let i=0;i<=ticks;i++){
-      const t = i / ticks;
+    // y labels
+    ctx.font = "13px ui-sans-serif, system-ui";
+    ctx.textAlign = "right";
+    ctx.textBaseline = "middle";
+    for(let i=0;i<=4;i++){
+      const t = i/4;
+      const v = Math.round(maxRev * (1 - t));
       const y = top + t*h;
-
-      // horizontal grid
-      ctx.strokeStyle = "rgba(255,255,255,.10)";
-      ctx.beginPath(); ctx.moveTo(left,y); ctx.lineTo(right,y); ctx.stroke();
-
-      // left (revenue)
-      const vRev = Math.round(maxRev * (1 - t));
-      ctx.fillStyle = "rgba(255,255,255,.55)";
-      ctx.textAlign = "right";
-      ctx.textBaseline = "middle";
-      ctx.fillText(`${vRev.toLocaleString("hu-HU")} Ft`, left - 8, y);
-
-      // right (sales count)
-      const vCnt = Math.round(maxCnt * (1 - t));
-      ctx.fillStyle = "rgba(255,255,255,.35)";
-      ctx.textAlign = "left";
-      ctx.fillText(`${vCnt.toLocaleString("hu-HU")} db`, right + 8, y);
+      ctx.fillStyle = "rgba(255,255,255,.72)";
+      ctx.fillText(`${v.toLocaleString("hu-HU")} Ft`, left - 10, y);
     }
 
-    // x labels (sparse)
-    const step = Math.ceil(days.length / 8);
-    ctx.fillStyle = "rgba(255,255,255,.65)";
+    // x labels (ritkítva)
+    const step = Math.ceil(days.length / 6);
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
+    ctx.fillStyle = "rgba(255,255,255,.70)";
     for(let i=0;i<days.length;i+=step){
-      const x = left + (days.length===1 ? 0 : (i/(days.length-1))*w);
+      const x = left + (days.length===1 ? w/2 : (i/(days.length-1))*w);
       ctx.fillText(labels[i], x, bottom + 10);
     }
 
     const xAt = (i) => left + (days.length===1 ? w/2 : (i/(days.length-1))*w);
-    const yRevAt = (v) => bottom - (v/maxRev)*h;
-    const yCntAt = (v) => bottom - (v/maxCnt)*h;
+    const yAt = (v) => bottom - (v/maxRev)*h;
 
     // revenue line (crypto-style)
-    ctx.strokeStyle = "rgba(124,92,255,.90)";
-    ctx.lineWidth = 2.6;
+    ctx.strokeStyle = "rgba(124,92,255,.95)";
+    ctx.lineWidth = 2.8;
     ctx.beginPath();
     for(let i=0;i<days.length;i++){
       const x = xAt(i);
-      const y = yRevAt(revs[i]);
+      const y = yAt(revs[i]);
       if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
     }
     ctx.stroke();
 
-    // sales line (2nd axis)
-    ctx.strokeStyle = "rgba(40,215,255,.85)";
-    ctx.lineWidth = 2.2;
-    ctx.beginPath();
-    for(let i=0;i<days.length;i++){
-      const x = xAt(i);
-      const y = yCntAt(cnts[i]);
-      if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
-    }
-    ctx.stroke();
+    // last point highlight
+    const lx = xAt(days.length-1);
+    const ly = yAt(revs[revs.length-1]);
+    ctx.fillStyle = "rgba(124,92,255,.95)";
+    ctx.beginPath(); ctx.arc(lx, ly, 3.8, 0, Math.PI*2); ctx.fill();
 
-    // legend
-    ctx.textAlign = "left";
-    ctx.textBaseline = "top";
-    ctx.fillStyle = "rgba(255,255,255,.70)";
-    ctx.fillText("Bevétel (Ft)", left, 6);
-    ctx.fillStyle = "rgba(255,255,255,.45)";
-    ctx.fillText("Eladások (db)", left + 130, 6);
+  }catch(e){
+    console.error(e);
+    if(kpi){
+      kpi.innerHTML = `<div class="small-muted">Diagramm hiba: <b>${escapeHtml(String(e?.message || e))}</b></div>`;
+    }
   }
+}
 
 
   function renderAll(){
