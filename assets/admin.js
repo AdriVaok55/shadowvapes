@@ -149,18 +149,32 @@
       flavor_en: p.flavor_en || ""
     })).filter(p => p.id);
 
-    // Sales normalize
-    state.sales = state.sales.map(s => ({
-      id: String(s.id || ""),
-      date: String(s.date || ""),
-      name: s.name || "",
-      payment: s.payment || "",
-      items: Array.isArray(s.items) ? s.items.map(it => ({
-        productId: String(it.productId || ""),
-        qty: Math.max(1, Number(it.qty || 1)),
-        unitPrice: Math.max(0, Number(it.unitPrice || 0))
-      })).filter(it => it.productId) : []
-    })).filter(s => s.id);
+    // Sales normalize (kompatibilis a régi formátummal is)
+state.sales = state.sales.map(s => {
+  const legacyPid = s.productId || s.pid || s.product || "";
+  const legacyQty = s.qty || s.quantity || 1;
+  const legacyPrice = s.unitPrice || s.price || s.amount || 0;
+
+  const items = Array.isArray(s.items)
+    ? s.items.map(it => ({
+        productId: String(it.productId || it.pid || ""),
+        qty: Math.max(1, Number.parseFloat(it.qty || it.quantity || 1) || 1),
+        unitPrice: Math.max(0, Number.parseFloat(it.unitPrice || it.price || 0) || 0)
+      })).filter(it => it.productId)
+    : (legacyPid ? [{
+        productId: String(legacyPid),
+        qty: Math.max(1, Number.parseFloat(legacyQty) || 1),
+        unitPrice: Math.max(0, Number.parseFloat(legacyPrice) || 0)
+      }] : []);
+
+  return {
+    id: String(s.id || ""),
+    date: String(s.date || s.day || s.createdAt || ""),
+    name: s.name || "",
+    payment: s.payment || s.method || "",
+    items
+  };
+}).filter(s => s.id);
   }
 
   function catById(id){
@@ -954,7 +968,7 @@ function markDirty(flags){
       <div class="kpi" style="margin-top:12px;" id="chartKpi"></div>
 
       <div style="margin-top:12px;">
-        <canvas id="revCanvas" width="1100" height="360" style="width:100%;border-radius:18px;border:1px solid rgba(255,255,255,.06);background:rgba(11,15,23,.25);"></canvas>
+        <canvas id="revCanvas" width="1100" height="360" style="width:100%;height:360px;display:block;border-radius:16px;border:1px solid rgba(255,255,255,.06);background:rgba(11,15,23,.25);"></canvas>
       </div>
     `;
 
@@ -978,6 +992,7 @@ function drawChart(){
 
     const ctx = canvas.getContext("2d");
     ctx.setTransform(dpr,0,0,dpr,0,0);
+    ctx.font = "12px system-ui, -apple-system, Segoe UI, Roboto, Arial";
     ctx.clearRect(0,0,cssW,cssH);
 
     const cat = state.filters.chartCat;
@@ -989,8 +1004,10 @@ function drawChart(){
       const st = saleTotals(s, cat);
       if(cat !== "all" && !st.hit) continue;
 
-      const d = String(s.date || "");
+      let d = String(s.date || "");
       if(!d) continue;
+      // ha véletlen idő is van benne: "YYYY-MM-DDTHH:MM" -> "YYYY-MM-DD"
+      d = d.split("T")[0].split(" ")[0];
 
       const rev = Number(st.revenue || 0);
       if(!Number.isFinite(rev)) continue;

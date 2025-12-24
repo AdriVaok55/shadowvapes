@@ -50,6 +50,21 @@ async function resolveSource(){
     }
   }catch{}
 
+  // ✅ stabil forrásfájl (custom domainnél is): data/sv_source.json
+  try{
+    const r = await fetch("data/sv_source.json", { cache: "no-store" });
+    if(r.ok){
+      const j = await r.json();
+      if(j && j.owner && j.repo){
+        const br = (j.branch || j.ref || \"main\").trim();
+        source = { owner: String(j.owner).trim(), repo: String(j.repo).trim(), branch: br };
+        try{ localStorage.setItem(\"sv_source\", JSON.stringify(source)); }catch{}
+        return source;
+      }
+    }
+  }catch{}
+
+
   const or = getOwnerRepoFromUrl() || getOwnerRepoCfg();
   if(!or) return null;
 
@@ -76,7 +91,7 @@ async function fetchJsonSmart(path, etagKey){
   const src = await resolveSource();
   const url = src
     ? `https://raw.githubusercontent.com/${src.owner}/${src.repo}/${src.branch}/${path}`
-    : `${path}`;
+    : `${path}${path.includes("?") ? "&" : "?"}_=${Date.now()}`;
 
   const headers = {};
   if(etagKey){
@@ -86,7 +101,9 @@ async function fetchJsonSmart(path, etagKey){
     headers["Pragma"] = "no-cache";
   }
 
-  const r = await fetch(url, { cache: "no-cache", headers });
+  headers["Cache-Control"] = "no-store";
+  headers["Pragma"] = "no-cache";
+  const r = await fetch(url, { cache: "no-store", headers });
   if(r.status === 304) return { notModified: true };
 
   if(!r.ok){
@@ -392,8 +409,9 @@ async function fetchJsonSmart(path, etagKey){
 
     // ✅ másik eszközön is gyors frissülés (könnyű poll, no cache)
 
-setInterval(async () => {
-  if(document.hidden) return;
+// ✅ Frissítés: gyors burst fókuszkor + adaptív poll (telón se szopjon)
+let lastSig = "";
+async function pollOnce(){
   try{
     const resp = await fetchJsonSmart("data/products.json", "products");
     if(resp.notModified) return;
@@ -413,7 +431,31 @@ setInterval(async () => {
       renderGrid();
     }
   }catch{}
-}, 1500);
+}
+
+async function burst(){
+  for(let i=0;i<5;i++){
+    await pollOnce();
+    await new Promise(r => setTimeout(r, 450));
+  }
+}
+
+function startPolling(){
+  let timer = null;
+  const tick = async () => {
+    await pollOnce();
+    const ms = document.hidden ? 9000 : 2000; // aktív: ~2s, háttér: ~9s
+    timer = setTimeout(tick, ms);
+  };
+  if(timer) clearTimeout(timer);
+  tick();
+}
+
+document.addEventListener("visibilitychange", () => {
+  if(!document.hidden) burst();
+});
+
+startPolling();
 
     $("#loader").style.display = "none";
     $("#app").style.display = "grid";
