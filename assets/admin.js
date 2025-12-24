@@ -146,7 +146,9 @@
       name_hu: p.name_hu || "",
       name_en: p.name_en || "",
       flavor_hu: p.flavor_hu || "",
-      flavor_en: p.flavor_en || ""
+      flavor_en: p.flavor_en || "",
+      visible: (p.visible === false ? false : true),
+      isNew: !!p.isNew
     })).filter(p => p.id);
 
     // Sales normalize (kompatibilis a régi formátummal is)
@@ -639,6 +641,14 @@ function markDirty(flags){
             </select>
             <input data-pid="${escapeHtml(p.id)}" data-k="stock" type="number" min="0" value="${p.stock}" style="width:110px;">
             <input data-pid="${escapeHtml(p.id)}" data-k="price" type="number" min="0" value="${p.price===null? "" : p.price}" placeholder="(kategória ár)" style="width:150px;">
+            <label class="small-muted" style="display:flex;gap:6px;align-items:center;">
+              <input type="checkbox" data-pid="${escapeHtml(p.id)}" data-k="visible"${p.visible===false?"":" checked"}>
+              Látható
+            </label>
+            <label class="small-muted" style="display:flex;gap:6px;align-items:center;">
+              <input type="checkbox" data-pid="${escapeHtml(p.id)}" data-k="isNew"${p.isNew?" checked":""}>
+              Új popup
+            </label>
             <button class="ghost" data-edit="${escapeHtml(p.id)}">Szerkeszt</button>
             <button class="danger" data-del="${escapeHtml(p.id)}">Töröl</button>
           </div>
@@ -673,6 +683,8 @@ function markDirty(flags){
         else if(k === "price") p.price = (el.value === "" ? null : Math.max(0, Number(el.value||0)));
         else if(k === "status") p.status = el.value;
         else if(k === "categoryId") p.categoryId = el.value;
+        else if(k === "visible") p.visible = !!el.checked;
+        else if(k === "isNew") p.isNew = !!el.checked;
 
         markDirty({ products:true });
       });
@@ -683,6 +695,8 @@ function markDirty(flags){
         if(!p) return;
         if(k === "status") p.status = el.value;
         if(k === "categoryId") p.categoryId = el.value;
+        if(k === "visible") p.visible = !!el.checked;
+        if(k === "isNew") p.isNew = !!el.checked;
         markDirty({ products:true });
       });
     });
@@ -714,7 +728,9 @@ function markDirty(flags){
       name_hu: "",
       name_en: "",
       flavor_hu: "",
-      flavor_en: ""
+      flavor_en: "",
+      visible: true,
+      isNew: false
     };
 
     const body = document.createElement("div");
@@ -734,6 +750,20 @@ function markDirty(flags){
           </select>
         </div>
 
+        <div class="field third"><label>Látható</label>
+          <div class="small-muted" style="display:flex;gap:8px;align-items:center;opacity:.9;">
+            <input id="p_visible" type="checkbox"${p.visible===false?"":" checked"}>
+            <span>Katalógusban</span>
+          </div>
+        </div>
+        <div class="field third"><label>Új termék popup</label>
+          <div class="small-muted" style="display:flex;gap:8px;align-items:center;opacity:.9;">
+            <input id="p_isNew" type="checkbox"${p.isNew?" checked":""}>
+            <span>Mutasd felugróban</span>
+          </div>
+        </div>
+
+
         <div class="field third"><label>Készlet</label><input id="p_stock" type="number" min="0" value="${p.stock}"></div>
         <div class="field third"><label>Ár (Ft) — üres: kategória ár</label><input id="p_price" type="number" min="0" value="${p.price===null?"":p.price}"></div>
         <div class="field full"><label>Kép URL</label><input id="p_img" value="${escapeHtml(p.image)}"></div>
@@ -743,7 +773,7 @@ function markDirty(flags){
         <div class="field third"><label>Íz EN</label><input id="p_fen" value="${escapeHtml(p.flavor_en)}"></div>
       </div>
       <div class="small-muted" style="margin-top:10px;">
-        soon → csak a “Hamarosan” tabban látszik. out/stock=0 → public oldalon leghátul + szürke.
+        soon → megjelenik a kategóriájában is (leghátul), plusz a “Hamarosan” tabban. out/stock=0 → public oldalon leghátul + szürke.
       </div>
     `;
 
@@ -760,7 +790,9 @@ function markDirty(flags){
           name_hu: ($("#p_name").value||"").trim(),
           name_en: ($("#p_name").value||"").trim(),
           flavor_hu: ($("#p_fhu").value||"").trim(),
-          flavor_en: ($("#p_fen").value||"").trim()
+          flavor_en: ($("#p_fen").value||"").trim(),
+          visible: !!$("#p_visible").checked,
+          isNew: !!$("#p_isNew").checked
         };
         if(!np.id) return;
 
