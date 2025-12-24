@@ -676,21 +676,25 @@
         st.textContent = `
           .popup-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.66);display:flex;align-items:center;justify-content:center;padding:18px;z-index:9999}
           .popup-modal{width:min(760px,92vw);max-height:86vh;overflow:hidden;background:rgba(12,12,16,.96);border:1px solid rgba(255,255,255,.10);border-radius:22px;box-shadow:0 18px 70px rgba(0,0,0,.55);padding:16px 16px 14px;display:flex;flex-direction:column;gap:12px}
-          .popup-head{display:flex;flex-direction:column;gap:4px}
+          .popup-head,.popup-top{display:flex;flex-direction:column;gap:4px}
           .popup-title{font-size:18px;font-weight:800;letter-spacing:.2px}
           .popup-sub{font-size:13px;opacity:.75}
           .popup-carousel{position:relative;overflow:hidden;border-radius:18px;border:1px solid rgba(255,255,255,.08)}
-          .popup-track{display:flex;transition:transform .35s ease}
+          .popup-track{display:flex;transition:transform .35s ease;will-change:transform;transform:translate3d(0,0,0)}
           .popup-item{flex:0 0 100%;display:flex;gap:12px;align-items:center;padding:12px;background:rgba(255,255,255,.02)}
-          .popup-img{width:104px;height:104px;border-radius:18px;object-fit:cover;background:rgba(255,255,255,.06)}
+          .popup-img{width:104px;height:104px;border-radius:18px;overflow:hidden;background:rgba(255,255,255,.06);flex:0 0 auto}
+          .popup-img img{width:100%;height:100%;object-fit:cover;display:block}
           .popup-info{display:flex;flex-direction:column;gap:6px;min-width:0}
           .popup-name{font-weight:900;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
           .popup-flavor{font-size:13px;opacity:.8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-          .popup-meta{display:flex;gap:10px;flex-wrap:wrap;font-size:13px;opacity:.9}
+          .popup-meta{display:flex;flex-direction:column;gap:6px;min-width:0}
+          .popup-row{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;font-size:13px;opacity:.9}
+          .popup-price{font-weight:900}
+          .popup-stock{opacity:.85}
           .popup-nav{display:flex;align-items:center;justify-content:space-between;gap:10px}
           .popup-dots{font-size:12px;opacity:.75}
-          .popup-btns{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}
-          .popup-chk{display:flex;align-items:center;gap:8px;font-size:13px;opacity:.85;user-select:none}
+          .popup-btns,.popup-bottom{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+          .popup-chk,.chk{display:flex;align-items:center;gap:8px;font-size:13px;opacity:.85;user-select:none}
           .popup-actions{display:flex;gap:10px;align-items:center}
           .popup-actions button{white-space:nowrap}
         `;
@@ -761,8 +765,47 @@
       track.className = "popup-track";
       carousel.appendChild(track);
 
-      const items = curCat.products || [];
+      const items = Array.isArray(curCat.products) ? curCat.products : [];
+      if(!items.length){
+        catIndex += 1;
+        render();
+        return;
+      }
       let slide = 0;
+
+      const nav = document.createElement("div");
+      nav.className = "popup-nav";
+
+      const prev = document.createElement("button");
+      prev.className = "ghost";
+      prev.textContent = "‹";
+
+      const mid = document.createElement("div");
+      mid.className = "popup-dots";
+      function updateMid(){
+        mid.textContent = `${slide+1}/${items.length}`;
+      }
+
+      const next = document.createElement("button");
+      next.className = "ghost";
+      next.textContent = "›";
+
+      nav.appendChild(prev);
+      nav.appendChild(mid);
+      nav.appendChild(next);
+
+      const goTo = (idx, instant=false) => {
+        slide = (idx + items.length) % items.length;
+        track.style.transition = instant ? "none" : "";
+        track.style.transform = `translate3d(${slide * -100}%,0,0)`;
+        updateMid();
+        if(instant){
+          requestAnimationFrame(()=>{ track.style.transition = ""; });
+        }
+      };
+
+      prev.onclick = () => goTo(slide - 1, false);
+      next.onclick = () => goTo(slide + 1, false);
 
       const renderSlides = () => {
         track.innerHTML = "";
@@ -771,7 +814,7 @@
           card.className = "popup-item";
 
           card.innerHTML = `
-            <div class="popup-img"><img loading="lazy" src="${p.image || ""}" alt="${(getName(p)+" "+getFlavor(p)).trim()}"></div>
+            <div class="popup-img"><img loading="lazy" decoding="async" src="${p.image || ""}" alt="${(getName(p)+" "+getFlavor(p)).trim()}"></div>
             <div class="popup-meta">
               <div class="popup-name">${getName(p)}</div>
               <div class="popup-flavor">${getFlavor(p)}</div>
@@ -786,16 +829,6 @@
         goTo(slide, true);
       };
 
-      const goTo = (idx, instant=false) => {
-        slide = (idx + items.length) % items.length;
-        track.style.transition = instant ? "none" : "";
-        track.style.transform = `translateX(${slide * -100}%)`;
-        updateMid();
-        if(instant){
-          requestAnimationFrame(()=>{ track.style.transition = ""; });
-        }
-      };
-
       renderSlides();
 
       if(items.length > 1){
@@ -803,28 +836,6 @@
           goTo(slide + 1, false);
         }, 3200);
       }
-
-      const nav = document.createElement("div");
-      nav.className = "popup-nav";
-
-      const prev = document.createElement("button");
-      prev.className = "ghost";
-      prev.textContent = "‹";
-      prev.onclick = () => goTo(slide - 1, false);
-
-      const next = document.createElement("button");
-      next.className = "ghost";
-      next.textContent = "›";
-      next.onclick = () => goTo(slide + 1, false);
-
-      const mid = document.createElement("div");
-      mid.className = "popup-dots";
-      const updateMid = () => { mid.textContent = `${slide+1}/${items.length}`; };
-      updateMid();
-
-      nav.appendChild(prev);
-      nav.appendChild(mid);
-      nav.appendChild(next);
 
       const bottom = document.createElement("div");
       bottom.className = "popup-bottom";
@@ -837,7 +848,13 @@
       btnSkip.className = "ghost";
       btnSkip.textContent = t("skipAll");
       btnSkip.onclick = () => {
-        // nem mentjük hide-ot → kövi betöltésnél újra feldobja
+        // ha be van pipálva a "Ne mutasd többször", akkor az ÖSSZES aktív popup-ot elrejtjük erre a rev-re
+        const chk = modal.querySelector("#ppDont");
+        if(chk && chk.checked){
+          for(const q of queue){
+            try{ localStorage.setItem(popupHideKey(q.popup), "1"); }catch{}
+          }
+        }
         closeAll();
       };
 
