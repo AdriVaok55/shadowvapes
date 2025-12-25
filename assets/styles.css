@@ -38,7 +38,7 @@ button, input, select{
   to{ opacity:1; transform: translateY(0); }
 }
 
-/* Text outlines for better readability */
+/* ✅ TEXT-SHADOW: Jobb olvashatóság */
 .badge,
 .overlay-title .name,
 .overlay-title .flavor,
@@ -583,6 +583,7 @@ button, input, select{
   width: 100%;
   height: 100%;
   object-fit: contain;
+  max-height: 350px;
 }
 .popup-product-info{
   display: flex;
@@ -690,8 +691,8 @@ button, input, select{
 /* Check grid for admin popup */
 .check-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 10px;
   max-height: 300px;
   overflow-y: auto;
   padding: 10px;
@@ -701,9 +702,9 @@ button, input, select{
 
 .check-grid label.chk {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px;
   border-radius: 8px;
   background: rgba(255,255,255,0.05);
   transition: background 0.2s;
