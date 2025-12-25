@@ -5,7 +5,7 @@
       "label_hu": "Elfbar Ice King 30k",
       "label_en": "Elfbar Ice King 30k",
       "basePrice": 6000,
-      "featuredEnabled": false
+      "featuredEnabled": true
     }
   ],
   "products": [
@@ -91,7 +91,7 @@
   "popups": [],
   "updatedAt": 1766663310090,
   "_meta": {
-    "rev": 1766674048458,
-    "updatedAt": "2025-12-25T14:47:28.458Z"
+    "rev": 1766674052052,
+    "updatedAt": "2025-12-25T14:47:32.052Z"
   }
 }
