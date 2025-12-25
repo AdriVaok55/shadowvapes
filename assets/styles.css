@@ -38,6 +38,20 @@ button, input, select{
   to{ opacity:1; transform: translateY(0); }
 }
 
+/* Text outlines for better readability */
+.badge,
+.overlay-title .name,
+.overlay-title .flavor,
+.popup-title,
+.popup-subtitle,
+.popup-product-name,
+.popup-product-flavor,
+.popup-product-price,
+.popup-product-stock,
+.popup-product-expected {
+  text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+}
+
 #loader{
   position:fixed; inset:0;
   display:flex; align-items:center; justify-content:center;
@@ -421,6 +435,7 @@ button, input, select{
   margin: 0 0 8px 0;
   color: var(--brand);
   font-size: 14px;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.5);
 }
 
 .actions{
@@ -504,25 +519,26 @@ button, input, select{
 /* Popup stílusok (app.js-hez) */
 .popup-backdrop{
   position:fixed; inset:0;
-  background: rgba(0,0,0,.75);
+  background: rgba(0,0,0,.85);
   display:flex; align-items:center; justify-content:center;
   padding: 20px;
   z-index: 9999;
 }
 .popup-modal{
   width: min(900px, 95vw);
-  max-height: 90vh;
-  overflow: hidden;
+  height: min(700px, 90vh);
   background: rgba(15,22,36,.95);
   border: 1px solid rgba(255,255,255,.1);
   border-radius: 22px;
   box-shadow: 0 25px 80px rgba(0,0,0,.6);
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 .popup-header{
   padding: 20px;
   border-bottom: 1px solid rgba(255,255,255,.1);
+  flex-shrink: 0;
 }
 .popup-title{
   font-size: 22px;
@@ -537,35 +553,44 @@ button, input, select{
   flex: 1;
   overflow: hidden;
   position: relative;
+  touch-action: pan-y;
 }
 .popup-slider{
   display: flex;
-  transition: transform 0.5s ease;
   height: 100%;
+  transition: transform 0.5s ease;
+  will-change: transform;
 }
 .popup-slide{
   flex: 0 0 100%;
   padding: 30px;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  align-items: center;
+  justify-content: center;
+  overflow-y: auto;
 }
 .popup-product-image{
   width: 100%;
+  max-width: 400px;
   aspect-ratio: 1/1;
   border-radius: 18px;
   overflow: hidden;
   background: rgba(255,255,255,.05);
+  margin-bottom: 20px;
 }
 .popup-product-image img{
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
 }
 .popup-product-info{
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 12px;
+  text-align: center;
+  width: 100%;
 }
 .popup-product-name{
   font-size: 24px;
@@ -584,6 +609,10 @@ button, input, select{
   font-size: 16px;
   color: var(--text);
 }
+.popup-product-expected{
+  font-size: 14px;
+  color: var(--warning);
+}
 .popup-footer{
   padding: 20px;
   border-top: 1px solid rgba(255,255,255,.1);
@@ -591,6 +620,7 @@ button, input, select{
   justify-content: space-between;
   align-items: center;
   gap: 15px;
+  flex-shrink: 0;
 }
 .popup-dots{
   display: flex;
@@ -604,6 +634,7 @@ button, input, select{
   border-radius: 50%;
   background: rgba(255,255,255,.2);
   cursor: pointer;
+  transition: background 0.3s;
 }
 .popup-dot.active{
   background: var(--brand);
@@ -611,6 +642,75 @@ button, input, select{
 .popup-buttons{
   display: flex;
   gap: 10px;
+}
+
+/* Navigation arrows */
+.popup-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  background: rgba(0,0,0,0.5);
+  border: none;
+  color: white;
+  font-size: 24px;
+  padding: 10px;
+  cursor: pointer;
+  z-index: 100;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.7;
+  transition: opacity 0.3s;
+}
+.popup-arrow:hover {
+  opacity: 1;
+}
+.popup-arrow.prev {
+  left: 10px;
+}
+.popup-arrow.next {
+  right: 10px;
+}
+
+/* Swipe hint */
+.popup-swipe-hint {
+  position: absolute;
+  bottom: 10px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  color: var(--muted);
+  font-size: 12px;
+  opacity: 0.6;
+}
+
+/* Check grid for admin popup */
+.check-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 8px;
+  max-height: 300px;
+  overflow-y: auto;
+  padding: 10px;
+  background: rgba(0,0,0,0.2);
+  border-radius: 10px;
+}
+
+.check-grid label.chk {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.05);
+  transition: background 0.2s;
+}
+
+.check-grid label.chk:hover {
+  background: rgba(255,255,255,0.1);
 }
 
 @media (max-width: 860px){
@@ -628,5 +728,8 @@ button, input, select{
   }
   .popup-product-price{
     font-size: 24px;
+  }
+  .popup-arrow {
+    display: none; /* Mobile swipe */
   }
 }
