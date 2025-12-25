@@ -44,41 +44,40 @@
       .normalize("NFD")
       .replace(/[\u0300-\u036f]/g, "");
 
-  function catLabel(c) {
-    return (c && (state.lang === "en" ? (c.label_en || c.label_hu || c.id) : (c.label_hu || c.label_en || c.id))) || "";
+ function catLabel(c) {
+  // Mindig magyar címke
+  return (c && c.label_hu) || (c && c.label_en) || (c && c.id) || "";
   }
 
   function getName(p) {
     return (p && (p.name_hu || p.name_en || p.name)) || "";
   }
-  function getFlavor(p) {
-    if (!p) return "";
-    return state.lang === "en"
-      ? (p.flavor_en || p.flavor_hu || p.flavor || "")
-      : (p.flavor_hu || p.flavor_en || p.flavor || "");
+  function getName(p) {
+  // Mindig magyar név, ha nincs magyar, akkor angol (de a katalógusban csak magyar jelenik meg)
+  return (p && p.name_hu) || (p && p.name_en) || (p && p.name) || "";
   }
 
   // ✅ Csak hónap formátum kezelése: YYYY-MM -> "2025. December"
-  function formatMonth(monthStr) {
-    if (!monthStr) return "";
-    try {
-      const [year, month] = monthStr.split("-");
-      if (!year || !month) return monthStr;
-      
-      const monthNum = parseInt(month, 10);
-      if (isNaN(monthNum) || monthNum < 1 || monthNum > 12) return monthStr;
-      
-      const monthNames = state.lang === "en" 
-        ? ["January", "February", "March", "April", "May", "June", 
-           "July", "August", "September", "October", "November", "December"]
-        : ["Január", "Február", "Március", "Április", "Május", "Június",
-           "Július", "Augusztus", "Szeptember", "Október", "November", "December"];
-      
-      return `${year}. ${monthNames[monthNum - 1]}`;
-    } catch {
-      return monthStr;
-    }
+function formatMonth(monthStr) {
+  if (!monthStr) return "";
+  try {
+    const [year, month] = monthStr.split("-");
+    if (!year || !month) return monthStr;
+    
+    const monthNum = parseInt(month, 10);
+    if (isNaN(monthNum) || monthNum < 1 || monthNum > 12) return monthStr;
+    
+    const monthNames = state.lang === "en" 
+      ? ["January", "February", "March", "April", "May", "June", 
+         "July", "August", "September", "October", "November", "December"]
+      : ["Január", "Február", "Március", "Április", "Május", "Június",
+         "Július", "Augusztus", "Szeptember", "Október", "November", "December"];
+    
+    return monthNames[monthNum - 1]; // Csak a hónap neve
+  } catch {
+    return monthStr;
   }
+}
 
   function effectivePrice(p) {
     const price = p && p.price;
@@ -568,9 +567,12 @@
       img.src = p.image || "";
 
       // sold-out legyen szürke (CSS is)
-      if (out) {
-        img.style.filter = "grayscale(.75) contrast(.95) brightness(.85)";
-      }
+   if (out) {
+  img.style.filter = "grayscale(.75) contrast(.95) brightness(.85)";
+} else if (soon) {
+  // Hamarosan termékek képe enyhén szürke
+  img.style.filter = "grayscale(0.3) contrast(1) brightness(0.95)";
+}
 
       const badges = document.createElement("div");
       badges.className = "badges";
