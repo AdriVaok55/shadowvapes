@@ -159,7 +159,8 @@
       name_en: p.name_en || "",
       flavor_hu: p.flavor_hu || "",
       flavor_en: p.flavor_en || "",
-      soonEta: String(p.soonEta || p.eta || "")
+      // ✅ Csak hónap formátum: YYYY-MM
+      soonEta: String(p.soonEta || p.eta || "").replace(/^(\d{4}-\d{2}).*$/, "$1")
     })).filter(p => p.id);
 
     // Popups normalize
@@ -240,7 +241,7 @@ state.sales = state.sales.map(s => {
 
   /* ---------- GitHub load/save ---------- */
   async function tryLoadFromGithub(cfg){
-    // branch fallback main/master automatikusan, ha “No commit found for the ref ...”
+    // branch fallback main/master automatikusan, ha "No commit found for the ref ..."
     const branchesToTry = [cfg.branch, "main", "master"].filter((v,i,a)=> v && a.indexOf(v)===i);
 
     let lastErr = null;
@@ -306,6 +307,11 @@ state.sales = state.sales.map(s => {
   async function saveDataNow(){
     if(!state.loaded) return;
 
+    // ✅ MENTÉS GYORSÍTÁS: Csak akkor mentünk, ha tényleges változás van
+    if (!state.dirtyProducts && !state.dirtySales) {
+      setSaveStatus("ok","Nincs változás");
+      return;
+    }
 
     // Ne fusson párhuzamos mentés (különben SHA mismatch)
     if(state.saving){
@@ -485,8 +491,8 @@ function markDirty(flags){
     }
     if(state.saveTimer) clearTimeout(state.saveTimer);
     setSaveStatus("busy","Változás…");
-    // mobilon is stabilabb: ne lőjünk 0.3mp-enként mentést minden billentyűre
-    const ms = Math.max(200, Math.min(2000, Number(localStorage.getItem("sv_autosave_ms") || 650)));
+    // ✅ MENTÉS GYORSÍTÁS: növelt alapérték 1000 ms
+    const ms = Math.max(200, Math.min(2000, Number(localStorage.getItem("sv_autosave_ms") || 1000)));
     state.saveTimer = setTimeout(() => {
       saveDataNow();
     }, ms);
@@ -534,9 +540,9 @@ function markDirty(flags){
           <select id="cfgAutosave">
             <option value="350">350 ms (gyors)</option>
             <option value="550">550 ms</option>
-            <option value="650">650 ms (alap)</option>
+            <option value="650">650 ms</option>
             <option value="850">850 ms</option>
-            <option value="1000">1000 ms (stabil)</option>
+            <option value="1000" selected>1000 ms (alap)</option>
           </select>
         </div>
         <div class="field full">
@@ -594,10 +600,10 @@ function markDirty(flags){
     try{
       const sel = $("#cfgAutosave");
       if(sel){
-        const cur = Number(localStorage.getItem("sv_autosave_ms") || 650);
+        const cur = Number(localStorage.getItem("sv_autosave_ms") || 1000);
         sel.value = String(cur);
         sel.onchange = () => {
-          const ms = Math.max(200, Math.min(2000, Number(sel.value || 650)));
+          const ms = Math.max(200, Math.min(2000, Number(sel.value || 1000)));
           localStorage.setItem("sv_autosave_ms", String(ms));
           setSaveStatus("ok","Auto-mentés beállítva ✅");
         };
@@ -822,7 +828,7 @@ function markDirty(flags){
       name_en: "",
       flavor_hu: "",
       flavor_en: "",
-      soonEta: "",
+      soonEta: "", // ✅ Csak hónap formátum
       visible: true
     };
 
@@ -843,7 +849,7 @@ function markDirty(flags){
           </select>
         </div>
 
-        <div class="field third"><label>Várható készlet (csak "soon")</label><input id="p_eta" value="${escapeHtml(p.soonEta||"")}" placeholder="pl. 2026-01-15"></div>
+        <div class="field third"><label>Várható hónap (csak "soon")</label><input id="p_eta" type="month" value="${escapeHtml(p.soonEta||"")}" placeholder="YYYY-MM"></div>
 
         <div class="field third"><label>Látható</label><label class="chk" style="justify-content:flex-start;"><input type="checkbox" id="p_visible" ${p.visible===false?"":"checked"}> Megjelenjen</label></div>
 
@@ -856,7 +862,8 @@ function markDirty(flags){
         <div class="field third"><label>Íz EN</label><input id="p_fen" value="${escapeHtml(p.flavor_en)}"></div>
       </div>
       <div class="small-muted" style="margin-top:10px;">
-        soon → csak a “Hamarosan” tabban látszik. out/stock=0 → public oldalon leghátul + szürke.
+        soon → csak a "Hamarosan" tabban látszik. out/stock=0 → public oldalon leghátul + szürke.<br>
+        Várható hónap formátum: ÉÉÉÉ-HH (pl. 2025-12)
       </div>
     `;
 
@@ -875,7 +882,8 @@ function markDirty(flags){
           name_en: ($("#p_name").value||"").trim(),
           flavor_hu: ($("#p_fhu").value||"").trim(),
           flavor_en: ($("#p_fen").value||"").trim(),
-          soonEta: ($("#p_eta").value||"").trim()
+          // ✅ Csak hónap formátumot fogadunk el
+          soonEta: ($("#p_eta").value||"").replace(/^(\d{4}-\d{2}).*$/, "$1")
         };
         if(np.status !== "soon") np.soonEta = "";
         if(!np.id) return;
@@ -1234,7 +1242,23 @@ function markDirty(flags){
     const cats = [...state.doc.categories].sort((a,b)=>(a.label_hu||a.id).localeCompare((b.label_hu||b.id),"hu"));
     const catMap = new Map(cats.map(c => [String(c.id), c]));
 
-    const prods = [...state.doc.products].sort((a,b)=>(a.name_hu||a.name_en||"").localeCompare((b.name_hu||b.name_en||""),"hu"));
+    // ✅ POPUP TERMÉKEK RENDEZETTEN: kategória > név > íz
+    const prods = [...state.doc.products].sort((a,b) => {
+      // Kategória szerint
+      const catA = catMap.get(String(a.categoryId||""))?.label_hu || "";
+      const catB = catMap.get(String(b.categoryId||""))?.label_hu || "";
+      if (catA !== catB) return catA.localeCompare(catB, "hu");
+      
+      // Név szerint
+      const nameA = a.name_hu || a.name_en || "";
+      const nameB = b.name_hu || b.name_en || "";
+      if (nameA !== nameB) return nameA.localeCompare(nameB, "hu");
+      
+      // Íz szerint
+      const flavorA = a.flavor_hu || a.flavor_en || "";
+      const flavorB = b.flavor_hu || b.flavor_en || "";
+      return flavorA.localeCompare(flavorB, "hu");
+    });
 
     body.innerHTML = `
       <div class="form-grid">
@@ -1269,11 +1293,15 @@ function markDirty(flags){
               const c = catMap.get(cid);
               const cname = c ? (c.label_hu||c.id) : cid;
               return `
-                <label class="chk" data-cat="${escapeHtml(cid)}">
-                  <input type="checkbox" class="pp_prod" value="${escapeHtml(p.id)}"${(pp.productIds||[]).includes(p.id)?" checked":""}>
-                  <span class="small-muted">[${escapeHtml(cname||"—")}]</span>
-                  ${escapeHtml(p.name_hu||p.name_en||"—")}
-                  <span class="small-muted">• ${escapeHtml(p.flavor_hu||p.flavor_en||"")}</span>
+                <label class="chk" data-cat="${escapeHtml(cid)}" style="display:flex;flex-direction:column;gap:2px;padding:10px;border-radius:8px;background:rgba(255,255,255,0.05);">
+                  <div style="display:flex;align-items:center;gap:8px;">
+                    <input type="checkbox" class="pp_prod" value="${escapeHtml(p.id)}"${(pp.productIds||[]).includes(p.id)?" checked":""}>
+                    <div>
+                      <div style="font-weight:bold;">${escapeHtml(p.name_hu||p.name_en||"—")}</div>
+                      <div style="font-size:12px;color:var(--muted);">${escapeHtml(p.flavor_hu||p.flavor_en||"")}</div>
+                    </div>
+                  </div>
+                  <div style="font-size:11px;color:var(--brand2);margin-top:4px;">[${escapeHtml(cname||"—")}]</div>
                 </label>
               `;
             }).join("")}
