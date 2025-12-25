@@ -77,7 +77,7 @@
       return `${year}. ${monthNames[monthNum - 1]}`;
     } catch {
       return monthStr;
-    function getName(p) {
+function getName(p) {
   return (p && (p.name_hu || p.name_en || p.name)) || "";
 }
 function getFlavor(p) {
