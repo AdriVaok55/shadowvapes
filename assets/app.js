@@ -44,40 +44,45 @@
       .normalize("NFD")
       .replace(/[\u0300-\u036f]/g, "");
 
- function catLabel(c) {
-  // Mindig magyar címke
-  return (c && c.label_hu) || (c && c.label_en) || (c && c.id) || "";
+  function catLabel(c) {
+    // Mindig magyar címke
+    return (c && c.label_hu) || (c && c.label_en) || (c && c.id) || "";
   }
 
   function getName(p) {
-    return (p && (p.name_hu || p.name_en || p.name)) || "";
-  }
-  function getName(p) {
-  // Mindig magyar név, ha nincs magyar, akkor angol (de a katalógusban csak magyar jelenik meg)
-  return (p && p.name_hu) || (p && p.name_en) || (p && p.name) || "";
+    // Mindig magyar név
+    return (p && p.name_hu) || (p && p.name_en) || (p && p.name) || "";
   }
 
-  // ✅ Csak hónap formátum kezelése: YYYY-MM -> "2025. December"
-function formatMonth(monthStr) {
-  if (!monthStr) return "";
-  try {
-    const [year, month] = monthStr.split("-");
-    if (!year || !month) return monthStr;
-    
-    const monthNum = parseInt(month, 10);
-    if (isNaN(monthNum) || monthNum < 1 || monthNum > 12) return monthStr;
-    
-    const monthNames = state.lang === "en" 
-      ? ["January", "February", "March", "April", "May", "June", 
-         "July", "August", "September", "October", "November", "December"]
-      : ["Január", "Február", "Március", "Április", "Május", "Június",
-         "Július", "Augusztus", "Szeptember", "Október", "November", "December"];
-    
-    return monthNames[monthNum - 1]; // Csak a hónap neve
-  } catch {
-    return monthStr;
+  function getFlavor(p) {
+    if (!p) return "";
+    // Csak az ízek fordulnak nyelv szerint
+    return state.lang === "en"
+      ? (p.flavor_en || p.flavor_hu || p.flavor || "")
+      : (p.flavor_hu || p.flavor_en || p.flavor || "");
   }
-}
+
+  // Csak hónap formátum: YYYY-MM -> "December"
+  function formatMonth(monthStr) {
+    if (!monthStr) return "";
+    try {
+      const [year, month] = monthStr.split("-");
+      if (!year || !month) return monthStr;
+      
+      const monthNum = parseInt(month, 10);
+      if (isNaN(monthNum) || monthNum < 1 || monthNum > 12) return monthStr;
+      
+      const monthNames = state.lang === "en" 
+        ? ["January", "February", "March", "April", "May", "June", 
+           "July", "August", "September", "October", "November", "December"]
+        : ["Január", "Február", "Március", "Április", "Május", "Június",
+           "Július", "Augusztus", "Szeptember", "Október", "November", "December"];
+      
+      return monthNames[monthNum - 1]; // Csak a hónap neve
+    } catch {
+      return monthStr;
+    }
+  }
 
   function effectivePrice(p) {
     const price = p && p.price;
@@ -97,13 +102,14 @@ function formatMonth(monthStr) {
     return ((p && p.status) || "ok") === "soon";
   }
 
-  /* ----------------- Source resolving (RAW preferált, custom domainen is) ----------------- */
-  let source = null; // {owner, repo, branch}
+  /* ----------------- Source resolving (csak lokális fájlok) ----------------- */
+  let source = null;
 
   async function validateSource(s){
     try{
       if(!s || !s.owner || !s.repo || !s.branch) return false;
-      const testUrl = `https://raw.githubusercontent.com/${s.owner}/${s.repo}/${s.branch}/data/products.json?_=${Date.now()}`;
+      // Csak a lokális fájlt próbáljuk
+      const testUrl = `data/products.json?_=${Date.now()}`;
       const r = await fetch(testUrl, { cache: "no-store" });
       return r.ok;
     }catch{ return false; }
@@ -158,7 +164,6 @@ function formatMonth(monthStr) {
           source = cached;
           return source;
         }
-        try { localStorage.removeItem("sv_source"); } catch {}
       }
     } catch {}
 
@@ -178,52 +183,20 @@ function formatMonth(monthStr) {
     const or = getOwnerRepoFromUrl() || getOwnerRepoCfg();
     if (!or) return null;
 
-    const branches = [or.branch, "main", "master", "gh-pages"]
-      .filter(Boolean)
-      .filter((v, i, a) => a.indexOf(v) === i);
-
-    for (const br of branches) {
-      const testUrl = `https://raw.githubusercontent.com/${or.owner}/${or.repo}/${br}/data/products.json?_=${Date.now()}`;
-      try {
-        const r = await fetch(testUrl, { cache: "no-store" });
-        if (r.ok) {
-          source = { owner: or.owner, repo: or.repo, branch: br };
-          try { localStorage.setItem("sv_source", JSON.stringify(source)); } catch {}
-          return source;
-        }
-      } catch {}
-    }
-
-    return null;
+    source = { owner: or.owner, repo: or.repo, branch: or.branch || "main" };
+    try { localStorage.setItem("sv_source", JSON.stringify(source)); } catch {}
+    return source;
   }
 
   async function fetchJson(relPath, { forceBust=false } = {}){
-    const src = await resolveSource();
-    const relBase = relPath;
-    const rawBase = src ? `https://raw.githubusercontent.com/${src.owner}/${src.repo}/${src.branch}/${relPath}` : null;
-
     const mkUrl = (base) => forceBust ? `${base}${base.includes("?") ? "&" : "?"}_=${Date.now()}` : base;
-
+    
     const headers = {
       "Cache-Control": "no-cache, no-store, must-revalidate",
       Pragma: "no-cache",
     };
 
-    if (rawBase) {
-      try {
-        const url = mkUrl(rawBase);
-        const r = await fetch(url, { cache: "no-store", headers });
-        if (r.status === 304) return null;
-        if (r.ok) return await r.json();
-        try { localStorage.removeItem("sv_source"); } catch {}
-        source = null;
-      } catch {
-        try { localStorage.removeItem("sv_source"); } catch {}
-        source = null;
-      }
-    }
-
-    const url = mkUrl(relBase);
+    const url = mkUrl(relPath);
     const r = await fetch(url, { cache: "no-store", headers });
     if (r.status === 304) return null;
     if (!r.ok) throw new Error(`Nem tudtam betölteni: ${relPath} (${r.status})`);
@@ -278,13 +251,12 @@ function formatMonth(monthStr) {
   /* ----------------- Featured (Felkapott) ----------------- */
   function computeFeaturedByCategory(){
     state.featuredByCat = new Map();
-    if(!state.salesFresh) return; // ✅ ha nem friss a sales, ne találgassunk felkapottat
+    if(!state.salesFresh) return;
     
     const products = (state.productsDoc.products || []).filter(p => p && p.id && p.visible !== false);
     const cats = (state.productsDoc.categories || []);
     const enabledCats = new Set(cats.filter(c => c && c.id && (c.featuredEnabled === false ? false : true)).map(c => String(c.id)));
 
-    // totals: categoryId -> productId -> qty
     const totals = new Map();
     let any = 0;
 
@@ -296,7 +268,6 @@ function formatMonth(monthStr) {
         const p = products.find(x => String(x.id) === pid);
         if(!p) continue;
         
-        // ✅ Kizárjuk az "out" státuszú és 0 készletű termékeket
         if(p.status === "out" || p.stock <= 0) continue;
         
         const cid = String(p.categoryId || "");
@@ -308,7 +279,7 @@ function formatMonth(monthStr) {
       }
     }
 
-    if(any <= 0) return; // ✅ nincs eladás → nincs felkapott
+    if(any <= 0) return;
 
     for(const [cid, m] of totals.entries()){
       let bestPid = null;
@@ -318,7 +289,6 @@ function formatMonth(monthStr) {
         if(qty > bestQty){
           bestQty = qty; bestPid = pid;
         }else if(qty === bestQty && bestPid){
-          // tie-break: íz név abc szerint (HU/EN locale)
           const a = products.find(x=>String(x.id)===pid);
           const b = products.find(x=>String(x.id)===bestPid);
           const fa = norm(getFlavor(a));
@@ -332,10 +302,8 @@ function formatMonth(monthStr) {
     }
   }
 
-
-  /* ----------------- Change detection (avoid flicker + stale overwrites) ----------------- */
+  /* ----------------- Change detection ----------------- */
   function hashStr(str){
-    // tiny fast hash (djb2)
     let h = 5381;
     for(let i=0;i<str.length;i++){
       h = ((h << 5) + h) ^ str.charCodeAt(i);
@@ -368,13 +336,10 @@ function formatMonth(monthStr) {
     const nextRev = docRev(next);
     const now = Date.now();
 
-    // same content -> nothing
     if(state.docHash && nextSig === state.docHash) return false;
 
-    // protect against stale RAW/Pages caches overwriting a just-saved live payload
     if(state.docRev && nextRev && nextRev < state.docRev) return false;
 
-    // if we have a recent live update with rev, and network doc has no rev -> ignore briefly
     if(state.docRev && !nextRev && state.lastLiveTs && (now - state.lastLiveTs) < 90_000){
       return false;
     }
@@ -390,7 +355,6 @@ function formatMonth(monthStr) {
     const arr = Array.isArray(nextSales) ? nextSales : [];
     const sig = salesSig(arr);
     if(sig && sig === state.salesHash){
-      // keep fresh flag updated only if it becomes true
       if(fresh) state.salesFresh = true;
       return false;
     }
@@ -442,7 +406,6 @@ function formatMonth(monthStr) {
       list = list.filter((p) => norm(getName(p) + " " + getFlavor(p)).includes(q));
     }
 
-    // ✅ order: ok ... then soon ... then out
     const okPart = list.filter((p) => !isOut(p) && !isSoon(p));
     const soonPart = list.filter((p) => !isOut(p) && isSoon(p));
     const outPart = list.filter((p) => isOut(p));
@@ -511,7 +474,6 @@ function formatMonth(monthStr) {
 
     let list = filterList();
 
-    // ✅ Featured: kategóriánként 1-1 (ha van eladás) + kategória toggle (admin)
     const featuredIds = new Set();
     let featuredToPrepend = [];
 
@@ -532,7 +494,6 @@ function formatMonth(monthStr) {
     }
 
     if(featuredToPrepend.length){
-      // remove from main list so ne duplázzon
       list = list.filter(p => !featuredIds.has(String(p.id)));
       list = [...featuredToPrepend, ...list];
     }
@@ -549,7 +510,6 @@ function formatMonth(monthStr) {
       const stockShown = out ? 0 : (soon ? Math.max(0, Number(p.stock || 0)) : Math.max(0, Number(p.stock || 0)));
       const price = effectivePrice(p);
 
-      // Determine card classes based on status
       let cardClass = "card fade-in";
       if (out) cardClass += " dim outline-red";
       else if (soon) cardClass += " outline-yellow";
@@ -566,13 +526,12 @@ function formatMonth(monthStr) {
       img.alt = (name + (flavor ? " - " + flavor : "")).trim();
       img.src = p.image || "";
 
-      // sold-out legyen szürke (CSS is)
-   if (out) {
-  img.style.filter = "grayscale(.75) contrast(.95) brightness(.85)";
-} else if (soon) {
-  // Hamarosan termékek képe enyhén szürke
-  img.style.filter = "grayscale(0.3) contrast(1) brightness(0.95)";
-}
+      // Kép szűrés
+      if (out) {
+        img.style.filter = "grayscale(.75) contrast(.95) brightness(.85)";
+      } else if (soon) {
+        img.style.filter = "grayscale(0.3) contrast(1) brightness(0.95)";
+      }
 
       const badges = document.createElement("div");
       badges.className = "badges";
@@ -590,7 +549,6 @@ function formatMonth(monthStr) {
         b.textContent = t("soon");
         badges.appendChild(b);
         
-        // Add expected month badge if available
         if (p.soonEta) {
           const expectedBadge = document.createElement("div");
           expectedBadge.className = "badge calendar";
@@ -642,7 +600,7 @@ function formatMonth(monthStr) {
     }
   }
 
-  /* ----------------- Popups (New products) ----------------- */
+  /* ----------------- Popups ----------------- */
   function popupHideKey(pp){
     const id = String(pp.id||"");
     const rev = Number(pp.rev || pp.updatedAt || pp.createdAt || 0) || 0;
@@ -651,7 +609,6 @@ function formatMonth(monthStr) {
 
   function buildPopupQueue(){
     const popups = (state.productsDoc.popups || []).filter(pp => pp && pp.id && (pp.enabled === false ? false : true));
-    // sort: newest first (admin list is newest first)
     popups.sort((a,b)=>(Number(b.createdAt||0)-Number(a.createdAt||0)));
 
     const products = (state.productsDoc.products || []).filter(p=>p && p.id && p.visible !== false);
@@ -660,12 +617,10 @@ function formatMonth(monthStr) {
     const queue = [];
 
     for(const pp of popups){
-      // skip if user hid this rev
       try{
         if(localStorage.getItem(popupHideKey(pp)) === "1") continue;
       }catch{}
 
-      // collect product ids
       const ids = new Set();
       for(const cid of (pp.categoryIds||[])){
         for(const p of products){
@@ -678,7 +633,6 @@ function formatMonth(monthStr) {
 
       const picked = [...ids].map(id => products.find(p=>String(p.id)===String(id))).filter(Boolean);
 
-      // group by category
       const byCat = new Map();
       for(const p of picked){
         const cid = String(p.categoryId||"");
@@ -686,7 +640,6 @@ function formatMonth(monthStr) {
         byCat.get(cid).push(p);
       }
 
-      // sort categories by label
       const catIds = [...byCat.keys()].sort((a,b)=>{
         const ca = cats.find(x=>String(x.id)===String(a));
         const cb = cats.find(x=>String(x.id)===String(b));
@@ -714,11 +667,9 @@ function formatMonth(monthStr) {
     const queue = buildPopupQueue();
     if(!queue.length) return;
 
-    // Remove existing popup if any
     const existing = document.getElementById("popupBg");
     if(existing) existing.remove();
 
-    // Create popup container
     const bg = document.createElement("div");
     bg.id = "popupBg";
     bg.className = "popup-backdrop";
@@ -745,9 +696,9 @@ function formatMonth(monthStr) {
     document.body.appendChild(bg);
 
     let currentPopup = 0;
-    let currentSlide = 0; // kategória slide index
-    let currentProductSlide = 0; // termék slide index
-    let slides = []; // termék slide-ok
+    let currentSlide = 0;
+    let currentProductSlide = 0;
+    let slides = [];
     let slideInterval = null;
 
     function renderPopup() {
@@ -776,11 +727,9 @@ function formatMonth(monthStr) {
             return;
         }
 
-        // Clear existing slides
         slider.innerHTML = "";
         slides = [];
 
-        // Create slides for each product
         products.forEach((product, index) => {
             const slide = document.createElement("div");
             slide.className = "popup-slide";
@@ -809,7 +758,6 @@ function formatMonth(monthStr) {
             slides.push(slide);
         });
 
-        // ✅ Infinite slider setup: only clone the first slide and append to the end (csak jobbról balra)
         if (slides.length > 1) {
             const firstClone = slides[0].cloneNode(true);
             slider.appendChild(firstClone);
@@ -833,7 +781,6 @@ function formatMonth(monthStr) {
             const offset = -currentProductSlide * 100;
             slider.style.transform = `translateX(${offset}%)`;
 
-            // ✅ Ha elérjük a klónt (utolsó slide), azonnal ugorjunk vissza az elsőre (láthatatlan ugrás)
             if (currentProductSlide === totalSlides) {
                 setTimeout(() => {
                     slider.style.transition = 'none';
@@ -854,9 +801,7 @@ function formatMonth(monthStr) {
             if (slides.length <= 1) return;
             let newIndex = currentProductSlide - 1;
             if (newIndex < 0) {
-                // Ha az elsőnél vagyunk és visszamegyünk, ugorjunk az utolsó igazi slide-ra
                 newIndex = totalSlides - 1;
-                // Először ugorjunk a klónra (láthatatlan), majd animálva az utolsóra
                 slider.style.transition = 'none';
                 currentProductSlide = totalSlides;
                 slider.style.transform = `translateX(-${currentProductSlide * 100}%)`;
@@ -869,7 +814,6 @@ function formatMonth(monthStr) {
             goToSlide(newIndex, true);
         }
 
-        // Create dots
         const dots = document.createElement("div");
         dots.className = "popup-dots";
         
@@ -884,13 +828,11 @@ function formatMonth(monthStr) {
             }
         }
 
-        // ✅ Auto slide (csak jobbra)
         if(slideInterval) clearInterval(slideInterval);
         if(totalSlides > 1) {
             slideInterval = setInterval(nextSlide, 4000);
         }
 
-        // Update header and footer
         header.innerHTML = `
             <div class="popup-title">${state.lang === "en" ? (popup.title_en || t("newAvail")) : (popup.title_hu || t("newAvail"))}</div>
             <div class="popup-subtitle">${category.label}</div>
@@ -902,7 +844,6 @@ function formatMonth(monthStr) {
         dontShow.className = "chk";
         dontShow.innerHTML = `<input type="checkbox" id="dontShowAgain"> ${t("dontShow")}`;
         
-        // ✅ "Skip all" csak akkor, ha több popup van
         const buttons = document.createElement("div");
         buttons.className = "popup-buttons";
         
@@ -911,7 +852,6 @@ function formatMonth(monthStr) {
             skipAllBtn.className = "ghost";
             skipAllBtn.textContent = t("skipAll");
             skipAllBtn.onclick = () => {
-                // Hide all popups
                 queue.forEach(q => {
                     try {
                         localStorage.setItem(popupHideKey(q.popup), "1");
@@ -943,7 +883,6 @@ function formatMonth(monthStr) {
         if(totalSlides > 1) footer.appendChild(dots);
         footer.appendChild(buttons);
 
-        // ✅ Navigation arrows (mindkét irányba)
         if(totalSlides > 1) {
             const prevArrow = document.createElement("button");
             prevArrow.className = "popup-arrow prev";
@@ -967,7 +906,6 @@ function formatMonth(monthStr) {
 
     renderPopup();
 
-    // ✅ Swipe support for mobile (mindkét irány)
     let touchStartX = 0;
     let touchEndX = 0;
 
@@ -986,16 +924,13 @@ function formatMonth(monthStr) {
 
         if(Math.abs(diff) > swipeThreshold) {
             if(diff > 0) {
-                // Swipe left - next
                 nextSlide();
             } else {
-                // Swipe right - previous
                 prevSlide();
             }
         }
     }
 
-    // Close on background click
     bg.addEventListener("click", (e) => {
         if(e.target === bg) {
             if(slideInterval) clearInterval(slideInterval);
@@ -1017,7 +952,6 @@ function formatMonth(monthStr) {
       setLangUI();
       renderNav();
       renderGrid();
-      // popups szöveg is nyelv függő – újrarender
       showPopupsIfNeeded();
     };
   }
@@ -1029,13 +963,10 @@ function formatMonth(monthStr) {
       const payload = JSON.parse(raw);
       if(!payload || !payload.doc) return false;
 
-      // csak friss live payloadot fogadjunk el (különben régi eladások / termékek ragadhatnak be)
       const ts = Number(payload.ts || 0) || 0;
       if(!ts || (Date.now() - ts) > 120_000) return false;
 
       const docChanged = applyDocIfNewer(payload.doc, { source: "live" });
-
-      // sales: csak akkor frissnek tekintjük, ha a payload ténylegesen tartalmaz sales adatot
       const salesChanged = applySalesIfChanged(normalizeSales(payload.sales || []), { fresh: true });
 
       if(docChanged || salesChanged){
@@ -1048,31 +979,26 @@ function formatMonth(monthStr) {
   async function loadAll({ forceBust=false } = {}){
     let changed = false;
 
-    // products
-    const docRaw = await fetchProducts({ forceBust });
-    if(docRaw){
-      const docChanged = applyDocIfNewer(docRaw, { source: "net" });
-      if(docChanged) changed = true;
+    try {
+      const docRaw = await fetchProducts({ forceBust });
+      if(docRaw){
+        const docChanged = applyDocIfNewer(docRaw, { source: "net" });
+        if(docChanged) changed = true;
+      }
+    } catch(err) {
+      console.error("Hiba a termékek betöltése közben:", err);
     }
 
-    // sales
-    let salesOk = false;
-    try{
+    try {
       const salesRaw = await fetchSales({ forceBust });
-      salesOk = true;
-      // [] is truthy, so ok
-      const sChanged = applySalesIfChanged(normalizeSales(salesRaw || []), { fresh:true });
-      if(sChanged) changed = true;
-    }catch{
-      // ha nem tudjuk biztosan betölteni, ne jelenítsünk meg felkapottat
-      state.salesFresh = false;
+      if(salesRaw) {
+        applySalesIfChanged(normalizeSales(salesRaw || []), { fresh:true });
+      }
+    } catch(salesErr) {
+      console.warn("Eladások betöltése sikertelen.");
     }
 
-    // featured depends on BOTH products+sales; csak ha változott valami (vagy ha salesFresh változott)
-    if(changed || !state.salesFresh){
-      computeFeaturedByCategory();
-    }
-
+    computeFeaturedByCategory();
     return changed;
   }
 
@@ -1081,23 +1007,29 @@ function formatMonth(monthStr) {
     setLangUI();
     initLang();
 
-    // if admin pushed live payload (same browser) use it first
     hydrateFromLivePayload();
 
-    // load from network (RAW) to be sure
-    await loadAll({ forceBust:true });
+    try {
+      await loadAll({ forceBust:true });
+    } catch(err) {
+      console.error("Betöltési hiba:", err);
+      $("#loaderText").textContent = "Adatok betöltése... próbálom újra.";
+      // Próbáljuk újra
+      try {
+        await loadAll({ forceBust:true });
+      } catch(err2) {
+        console.error("Második próbálkozás is sikertelen:", err2);
+      }
+    }
 
     renderNav();
     renderGrid();
 
-    // show app
     $("#loader").style.display = "none";
     $("#app").style.display = "grid";
 
-    // popups
     setTimeout(() => showPopupsIfNeeded(), 500);
 
-    // live updates from admin (same browser)
     try{
       const bc = new BroadcastChannel("sv_live");
       bc.onmessage = (e) => {
@@ -1109,7 +1041,6 @@ function formatMonth(monthStr) {
             changed = applyDocIfNewer(e.data.doc, { source:"live" }) || changed;
           }
           if("sales" in e.data){
-            // admin mentés után ez friss
             changed = applySalesIfChanged(normalizeSales(e.data.sales || []), { fresh:true }) || changed;
           }
           if(changed){
@@ -1122,7 +1053,6 @@ function formatMonth(monthStr) {
       };
     }catch{}
 
-    // polling (light) - increased interval for mobile
     const loop = async () => {
       try{
         const changed = await loadAll({ forceBust:false });
@@ -1145,6 +1075,6 @@ function formatMonth(monthStr) {
   init().catch((err) => {
     console.error(err);
     $("#loaderText").textContent =
-      "Betöltési hiba. (Nyisd meg a konzolt.) Ha telefonon vagy ...vagy: nyisd meg egyszer a Sync linket az admin Beállításokból.";
+      "Betöltési hiba. Ellenőrizd a konzolt. Próbáld megnyitni a Sync linket az admin Beállításokból.";
   });
 })();
