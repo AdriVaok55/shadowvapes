@@ -1,7 +1,6 @@
 (() => {
   const API = "https://api.github.com";
 
-  // GitHub Contents API: a "/" maradjon "/" (különben data%2Fproducts.json lesz)
   function encodePath(path){
     return String(path || "")
       .split("/")
@@ -15,35 +14,27 @@
     for (const b of bytes) bin += String.fromCharCode(b);
     return btoa(bin);
   }
+  
   function fromBase64Unicode(b64){
     const bin = atob((b64 || "").replace(/\n/g,""));
     const bytes = Uint8Array.from(bin, c => c.charCodeAt(0));
     return new TextDecoder().decode(bytes);
   }
 
-  async function doFetch({token, method, url, body, authScheme}){
+  async function ghRequest(token, method, url, body){
     const headers = {
       "Accept": "application/vnd.github+json",
       "Content-Type": "application/json",
       "X-GitHub-Api-Version": "2022-11-28",
-      "Authorization": `${authScheme} ${token}`
+      "Authorization": `token ${token}`
     };
-    return await fetch(url, {
+    
+    const res = await fetch(url, {
       method,
       headers,
       cache: "no-store",
       body: body ? JSON.stringify(body) : undefined
     });
-  }
-
-  async function ghRequest(token, method, url, body){
-    // klasszikus PAT: "token", fine-grained: "Bearer" – itt mindkettőt próbáljuk 401-nél
-    let res = await doFetch({ token, method, url, body, authScheme: "token" });
-
-    if(res.status === 401){
-      // fallback
-      res = await doFetch({ token, method, url, body, authScheme: "Bearer" });
-    }
 
     const text = await res.text();
     let data = null;
@@ -78,8 +69,7 @@
     return await ghRequest(token, "PUT", url, body);
   }
 
-  // Biztonságos mentés: SHA mismatch esetén friss SHA-val újrapróbálja (jitter + több retry)
-  async function putFileSafe({token, owner, repo, path, branch, message, content, sha, retries=6}){
+  async function putFileSafe({token, owner, repo, path, branch, message, content, sha, retries=3}){
     let curSha = sha;
     let lastErr = null;
 
@@ -91,16 +81,10 @@
         const msg = String(e?.message || "");
         const status = Number(e?.status || 0);
 
-        const retryable =
-          status === 409 || status === 422 ||
-          msg.includes("does not match") ||
-          msg.includes("expected") ||
-          msg.includes("is at") ||
-          msg.toLowerCase().includes("sha");
+        const retryable = status === 409 || msg.includes("does not match") || msg.includes("expected");
 
         if(i < retries && retryable){
-          // kis jitter, hogy ne üssük egymást ha 2 admin nyitva van
-          await new Promise(r => setTimeout(r, 140 + Math.random()*260));
+          await new Promise(r => setTimeout(r, 200 + Math.random()*200));
           try{
             const latest = await getFile({token, owner, repo, path, branch});
             curSha = latest.sha;
