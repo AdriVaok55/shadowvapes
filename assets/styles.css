@@ -8,6 +8,8 @@
   --brand2:#28d7ff;
   --danger:#ff4d6d;
   --ok:#34d399;
+  --warning:#ffc107;
+  --hot:#ff9800;
   --shadow: 0 20px 60px rgba(0,0,0,.45);
   --radius: 18px;
 }
@@ -197,7 +199,20 @@ button, input, select{
   box-shadow: 0 10px 40px rgba(0,0,0,.25);
   transition: .18s;
 }
-.card:hover{ transform: translateY(-2px); border-color: rgba(124,92,255,.35); }
+.card:hover{ transform: translateY(-2px); }
+
+/* Elfogyott termékek piros outline */
+.card.outline-red {
+  border: 1px solid rgba(255, 77, 109, 0.5);
+}
+/* Hamarosan termékek sárga outline */
+.card.outline-yellow {
+  border: 1px solid rgba(255, 193, 7, 0.5);
+}
+/* Felkapott termékek narancs outline */
+.card.outline-orange {
+  border: 1px solid rgba(255, 152, 0, 0.5);
+}
 
 /* SOLD-OUT: tényleg legyen szürke */
 .card.dim{
@@ -212,7 +227,7 @@ button, input, select{
 .hero{
   position:relative;
   aspect-ratio: 1 / 1;
-  height: auto; /* régi 170px helyett */
+  height: auto;
   background: linear-gradient(135deg, rgba(124,92,255,.18), rgba(40,215,255,.10));
 }
 .hero img{
@@ -231,8 +246,25 @@ button, input, select{
   background: rgba(0,0,0,.45);
   border: 1px solid rgba(255,255,255,.12);
 }
-.badge.out{ background: rgba(255,77,109,.18); border-color: rgba(255,77,109,.35); }
-.badge.soon{ background: rgba(40,215,255,.14); border-color: rgba(40,215,255,.35); }
+.badge.out{
+  background: rgba(255,77,109,.18);
+  border-color: rgba(255,77,109,.35);
+}
+.badge.soon{
+  background: rgba(255,193,7,.18);
+  border-color: rgba(255,193,7,.35);
+}
+.badge.hot::before{
+  content: "🔥 ";
+}
+.badge.hot{
+  background: rgba(255,152,0,.18);
+  border-color: rgba(255,152,0,.35);
+}
+.badge.calendar{
+  background: rgba(40,215,255,.14);
+  border-color: rgba(40,215,255,.35);
+}
 
 .overlay-title{
   position:absolute;
@@ -379,6 +411,18 @@ button, input, select{
   border-color: rgba(124,92,255,.45);
 }
 
+/* Popup termékek csoportosítása */
+.cat-group{
+  margin-bottom: 15px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(255,255,255,.1);
+}
+.cat-group h4{
+  margin: 0 0 8px 0;
+  color: var(--brand);
+  font-size: 14px;
+}
+
 .actions{
   display:flex; gap:10px; flex-wrap:wrap;
   margin-top: 10px;
@@ -457,7 +501,132 @@ button, input, select{
 .dot.busy{ background: rgba(40,215,255,.9); }
 .dot.bad{ background: rgba(255,77,109,.9); }
 
+/* Popup stílusok (app.js-hez) */
+.popup-backdrop{
+  position:fixed; inset:0;
+  background: rgba(0,0,0,.75);
+  display:flex; align-items:center; justify-content:center;
+  padding: 20px;
+  z-index: 9999;
+}
+.popup-modal{
+  width: min(900px, 95vw);
+  max-height: 90vh;
+  overflow: hidden;
+  background: rgba(15,22,36,.95);
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 22px;
+  box-shadow: 0 25px 80px rgba(0,0,0,.6);
+  display: flex;
+  flex-direction: column;
+}
+.popup-header{
+  padding: 20px;
+  border-bottom: 1px solid rgba(255,255,255,.1);
+}
+.popup-title{
+  font-size: 22px;
+  font-weight: 800;
+  margin-bottom: 5px;
+}
+.popup-subtitle{
+  color: var(--muted);
+  font-size: 14px;
+}
+.popup-content{
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+.popup-slider{
+  display: flex;
+  transition: transform 0.5s ease;
+  height: 100%;
+}
+.popup-slide{
+  flex: 0 0 100%;
+  padding: 30px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.popup-product-image{
+  width: 100%;
+  aspect-ratio: 1/1;
+  border-radius: 18px;
+  overflow: hidden;
+  background: rgba(255,255,255,.05);
+}
+.popup-product-image img{
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.popup-product-info{
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.popup-product-name{
+  font-size: 24px;
+  font-weight: 800;
+}
+.popup-product-flavor{
+  font-size: 18px;
+  color: var(--muted);
+}
+.popup-product-price{
+  font-size: 28px;
+  font-weight: 900;
+  color: var(--brand);
+}
+.popup-product-stock{
+  font-size: 16px;
+  color: var(--text);
+}
+.popup-footer{
+  padding: 20px;
+  border-top: 1px solid rgba(255,255,255,.1);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 15px;
+}
+.popup-dots{
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  flex: 1;
+}
+.popup-dot{
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: rgba(255,255,255,.2);
+  cursor: pointer;
+}
+.popup-dot.active{
+  background: var(--brand);
+}
+.popup-buttons{
+  display: flex;
+  gap: 10px;
+}
+
 @media (max-width: 860px){
   .wrap{ grid-template-columns: 1fr; }
   .sidebar{ height:auto; position:relative; }
+  
+  .popup-slide{
+    padding: 20px;
+  }
+  .popup-product-name{
+    font-size: 20px;
+  }
+  .popup-product-flavor{
+    font-size: 16px;
+  }
+  .popup-product-price{
+    font-size: 24px;
+  }
 }
