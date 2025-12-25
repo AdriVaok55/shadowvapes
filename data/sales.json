@@ -1,1 +1,15 @@
-[]
+[
+  {
+    "id": "s_b47fe315dbd27_19b554f743d",
+    "date": "2025-12-25",
+    "name": "B. Zsolt",
+    "payment": "Vásárláskor",
+    "items": [
+      {
+        "productId": "p_c9b37b233bdb5_19b4dbb80eb",
+        "qty": 2,
+        "unitPrice": 6000
+      }
+    ]
+  }
+]
