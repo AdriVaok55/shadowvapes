@@ -549,55 +549,35 @@ button, input, select{
   color: var(--muted);
   font-size: 14px;
 }
-.popup-content {
+.popup-content{
   flex: 1;
   overflow: hidden;
   position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
   touch-action: pan-y;
 }
-
-.popup-slider {
+.popup-slider{
   display: flex;
   height: 100%;
   transition: transform 0.5s ease;
   will-change: transform;
-  align-items: center;
-  justify-content: flex-start;
 }
-
-.popup-slide {
+.popup-slide{
   flex: 0 0 100%;
-  padding: 20px;
+  padding: 30px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  box-sizing: border-box;
-  height: 100%;
+  overflow-y: auto;
 }
-
-.popup-product-image {
+.popup-product-image{
   width: 100%;
-  max-width: 320px;
+  max-width: 400px;
   aspect-ratio: 1/1;
   border-radius: 18px;
   overflow: hidden;
-  background: rgba(255,255,255,.03);
+  background: rgba(255,255,255,.05);
   margin-bottom: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.popup-product-image img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  max-height: 320px;
 }
 .popup-product-image img{
   width: 100%;
@@ -752,36 +732,5 @@ button, input, select{
   }
   .popup-arrow {
     display: none; /* Mobile swipe */
-  }
-}
-/* Soon képek - enyhe szürkítés */
-.soon-img {
-  filter: grayscale(0.3) contrast(0.95) brightness(0.95);
-}
-
-/* Out képek - erősebb szürkítés */
-.out-img {
-  filter: grayscale(.75) contrast(.95) brightness(.85);
-}
-
-/* Mobil nézet fix */
-@media (max-width: 860px) {
-  .popup-modal {
-    height: auto;
-    max-height: 85vh;
-    margin: 20px;
-  }
-  
-  .popup-slide {
-    padding: 15px;
-  }
-  
-  .popup-product-image {
-    max-width: 280px;
-    max-height: 280px;
-  }
-  
-  .popup-product-info {
-    padding: 0 10px;
   }
 }
