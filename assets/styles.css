@@ -519,6 +519,7 @@ button, input, select{
 
 /* Popup stílusok (app.js-hez) */
 /* Popup stílusok (app.js-hez) */
+/* Popup stílusok (app.js-hez) - TELJESEN JAVÍTVA */
 .popup-backdrop{
   position:fixed; inset:0;
   background: rgba(0,0,0,.85);
@@ -526,11 +527,11 @@ button, input, select{
   padding: 20px;
   z-index: 9999;
 }
-/* ✅ POPUP MODAL TELJESEN ÚJ STÍLUS */
+
 .popup-modal{
   width: min(900px, 95vw);
-  max-height: 90vh;
   height: auto;
+  max-height: 85vh;
   background: rgba(15,22,36,.95);
   border: 1px solid rgba(255,255,255,.1);
   border-radius: 22px;
@@ -539,54 +540,63 @@ button, input, select{
   flex-direction: column;
   overflow: hidden;
 }
+
 .popup-header{
   padding: 20px;
   border-bottom: 1px solid rgba(255,255,255,.1);
   flex-shrink: 0;
 }
+
 .popup-title{
   font-size: 22px;
   font-weight: 800;
   margin-bottom: 5px;
 }
+
 .popup-subtitle{
   color: var(--muted);
   font-size: 14px;
 }
-/* ✅ POPUP CONTENT - GÖRGETÉS ÉS MAGASSÁG */
+
+/* ✅ KULCSFONTOSSÁGÚ: Popup content fix magassággal */
 .popup-content{
   flex: 1;
-  overflow-y: auto;
+  overflow: hidden;
   position: relative;
-  touch-action: pan-y;
-  min-height: 0; /* Fontos: flex containerben */
-  padding: 0;
+  min-height: 400px;
+  max-height: calc(85vh - 150px);
+  display: flex;
+  flex-direction: column;
 }
-/* ✅ SLIDER TELJESEN ÚJ STÍLUS */
+
+/* ✅ Slider fix magassággal */
 .popup-slider{
   display: flex;
-  height: auto;
-  min-height: 100%;
+  height: 100%;
+  width: 100%;
   transition: transform 0.5s ease;
   will-change: transform;
+  flex-shrink: 0;
 }
-/* ✅ SLIDE - FLEX COLUMN, SCROLLABLE */
+
+/* ✅ Slide - egyszerű flex layout */
 .popup-slide{
   flex: 0 0 100%;
-  padding: 20px 30px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  min-height: 100%;
-  box-sizing: border-box;
+  justify-content: center;
+  padding: 20px;
+  height: 100%;
   overflow-y: auto;
-  justify-content: flex-start;
+  box-sizing: border-box;
 }
-/* ✅ PRODUCT IMAGE - RÉSZFLEX */
+
+/* ✅ Product image - fix magasság */
 .popup-product-image{
   width: 100%;
-  max-width: 300px;
-  aspect-ratio: 1/1;
+  max-width: 320px;
+  height: 320px;
   border-radius: 18px;
   overflow: hidden;
   background: rgba(255,255,255,.05);
@@ -596,65 +606,73 @@ button, input, select{
   justify-content: center;
   flex-shrink: 0;
 }
+
 .popup-product-image img{
   width: 100%;
   height: 100%;
   object-fit: contain;
-  max-height: 280px;
+  max-height: 300px;
 }
-/* ✅ PRODUCT INFO - GÖRGETÉS */
+
+/* ✅ Product info - fix helyen */
 .popup-product-info{
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   text-align: center;
   width: 100%;
   flex-shrink: 0;
-  padding-bottom: 10px;
 }
+
 .popup-product-name{
-  font-size: 22px;
+  font-size: 24px;
   font-weight: 800;
   line-height: 1.2;
 }
+
 .popup-product-flavor{
-  font-size: 16px;
+  font-size: 18px;
   color: var(--muted);
   line-height: 1.3;
 }
+
 .popup-product-price{
-  font-size: 24px;
+  font-size: 28px;
   font-weight: 900;
   color: var(--brand);
   margin-top: 5px;
 }
+
 .popup-product-stock{
   font-size: 16px;
   color: var(--text);
 }
+
 .popup-product-expected{
   font-size: 14px;
   color: var(--warning);
 }
-/* ✅ FOOTER - JÓ HELYEN */
+
+/* ✅ Footer - alul fix helyen */
 .popup-footer{
   padding: 15px 20px;
   border-top: 1px solid rgba(255,255,255,.1);
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 15px;
+  gap: 10px;
   flex-shrink: 0;
   flex-wrap: wrap;
 }
+
 .popup-dots{
   display: flex;
   gap: 8px;
   justify-content: center;
   flex: 1;
-  order: 2;
 }
+
 .popup-dot{
   width: 10px;
   height: 10px;
@@ -663,15 +681,15 @@ button, input, select{
   cursor: pointer;
   transition: background 0.3s;
 }
+
 .popup-dot.active{
   background: var(--brand);
 }
+
 .popup-buttons{
   display: flex;
   gap: 10px;
-  order: 3;
-  width: 100%;
-  justify-content: flex-end;
+  align-items: center;
 }
 
 /* Navigation arrows */
@@ -695,96 +713,106 @@ button, input, select{
   opacity: 0.7;
   transition: opacity 0.3s;
 }
+
 .popup-arrow:hover {
   opacity: 1;
 }
+
 .popup-arrow.prev {
   left: 10px;
 }
+
 .popup-arrow.next {
   right: 10px;
 }
 
-/* ✅ MOBILE STÍLUSOK - FIXÁLVA */
+/* ✅ MOBILE STÍLUSOK */
 @media (max-width: 860px){
-  .wrap{ grid-template-columns: 1fr; }
-  .sidebar{ height:auto; position:relative; }
-  
   .popup-modal {
     width: 95vw;
-    max-height: 85vh;
-    margin: 0;
+    max-height: 90vh;
   }
   
-  .popup-slide{
-    padding: 15px 20px;
-    min-height: auto;
-    overflow-y: auto;
-    justify-content: flex-start;
+  .popup-content {
+    min-height: 300px;
+    max-height: calc(90vh - 140px);
   }
   
-  .popup-product-image{
+  .popup-product-image {
     max-width: 250px;
-    margin-bottom: 15px;
+    height: 250px;
   }
   
-  .popup-product-image img{
+  .popup-product-image img {
     max-height: 220px;
   }
   
-  .popup-product-name{
+  .popup-product-name {
     font-size: 20px;
   }
   
-  .popup-product-flavor{
-    font-size: 14px;
+  .popup-product-flavor {
+    font-size: 16px;
   }
   
-  .popup-product-price{
-    font-size: 20px;
+  .popup-product-price {
+    font-size: 24px;
   }
   
   .popup-footer {
     flex-direction: column;
-    align-items: stretch;
-    gap: 10px;
-    padding: 12px 15px;
+    gap: 15px;
+    padding: 15px;
   }
   
   .popup-dots {
     order: 1;
-    margin-bottom: 5px;
   }
   
   .popup-buttons {
-    order: 3;
+    order: 2;
     flex-direction: column;
+    width: 100%;
   }
   
   .popup-arrow {
-    display: none; /* Mobile swipe */
+    display: none;
   }
 }
 
-/* ✅ EXTRA KIS MOBILE (iPhone SE stb.) */
-@media (max-width: 400px){
+/* ✅ KÉZLETES MOBILE */
+@media (max-width: 480px){
   .popup-modal {
-    max-height: 80vh;
+    max-height: 95vh;
   }
   
-  .popup-product-image{
+  .popup-content {
+    min-height: 250px;
+    max-height: calc(95vh - 140px);
+  }
+  
+  .popup-product-image {
     max-width: 200px;
+    height: 200px;
   }
   
-  .popup-product-image img{
+  .popup-product-image img {
     max-height: 180px;
   }
   
-  .popup-product-name{
+  .popup-product-name {
     font-size: 18px;
   }
   
-  .popup-product-flavor{
-    font-size: 13px;
+  .popup-product-flavor {
+    font-size: 14px;
+  }
+  
+  .popup-product-price {
+    font-size: 22px;
+  }
+  
+  .popup-slide {
+    padding: 15px;
   }
 }
