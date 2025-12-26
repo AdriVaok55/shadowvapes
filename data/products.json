@@ -12,8 +12,8 @@
     {
       "id": "p_568389f50aa19_19b4d718932",
       "categoryId": "elf30",
-      "status": "ok",
-      "stock": 8,
+      "status": "out",
+      "stock": 0,
       "visible": true,
       "price": null,
       "image": "https://media.discordapp.net/attachments/1281700323081326743/1453178739029704795/Grape_ice_bg_removed_correct.png?ex=694dd32a&is=694c81aa&hm=8513a136fbb57f1de475ab544995ac650409c8df51df52cd2dcdca5ed1e1c8da&=&format=webp&quality=lossless&width=960&height=960",
@@ -26,7 +26,7 @@
     {
       "id": "p_c9b37b233bdb5_19b4dbb80eb",
       "categoryId": "elf30",
-      "status": "ok",
+      "status": "soon",
       "stock": 5,
       "visible": true,
       "price": null,
@@ -97,7 +97,7 @@
   "popups": [],
   "updatedAt": 1766663310090,
   "_meta": {
-    "rev": 1766717530648,
-    "updatedAt": "2025-12-26T02:52:10.648Z"
+    "rev": 1766717798608,
+    "updatedAt": "2025-12-26T02:56:38.608Z"
   }
 }
