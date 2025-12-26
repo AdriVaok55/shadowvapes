@@ -6,6 +6,13 @@
       "label_en": "Elfbar Ice King 30k",
       "basePrice": 6000,
       "featuredEnabled": true
+    },
+    {
+      "id": "elfraya25",
+      "label_hu": "Elfbar Raya D3  25k",
+      "label_en": "Elfbar Raya D3  25k",
+      "basePrice": 7000,
+      "featuredEnabled": true
     }
   ],
   "products": [
@@ -97,7 +104,7 @@
   "popups": [],
   "updatedAt": 1766663310090,
   "_meta": {
-    "rev": 1766719439428,
-    "updatedAt": "2025-12-26T03:23:59.428Z"
+    "rev": 1766764486534,
+    "updatedAt": "2025-12-26T15:54:46.534Z"
   }
 }
