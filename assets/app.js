@@ -908,19 +908,22 @@
         const buttons = document.createElement("div");
         buttons.className = "popup-buttons";
         
-        if(queue.length > 1) {
-            const skipAllBtn = document.createElement("button");
-            skipAllBtn.className = "ghost";
-            skipAllBtn.textContent = t("skipAll");
-            skipAllBtn.onclick = () => {
-                // Hide all popups
-                queue.forEach(q => {
-                    try {
-                        localStorage.setItem(popupHideKey(q.popup), "1");
-                    } catch {}
-                });
-                if(slideInterval) clearInterval(slideInterval);
-                bg.remove();
+        skipAllBtn.onclick = () => {
+  const checkbox = document.getElementById("dontShowAgain");
+  const persist = !!(checkbox && checkbox.checked);
+
+  if (persist) {
+    // CSAK ekkor mentjük el, hogy többet ne jöjjön fel
+    queue.forEach(q => {
+      localStorage.setItem(popupHideKey(q.popup), "1");
+    });
+  }
+
+  // Ha nincs bepipálva → NINCS mentés, csak bezárás
+  if (slideInterval) clearInterval(slideInterval);
+  bg.remove();
+};
+
             };
             buttons.appendChild(skipAllBtn);
         }
