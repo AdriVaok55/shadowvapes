@@ -198,7 +198,7 @@
       "stock": 5,
       "visible": true,
       "price": null,
-      "image": "https://media.discordapp.net/attachments/1281700323081326743/1454166411990663240/Black-Currant-Pineapple_NOBG_.png?ex=69501981&is=694ec801&hm=f9314034ce1437d8bb27114a082846ef99f96ac3383418eabe73885a787e5020&=&format=webp&quality=lossless&width=856&height=856",
+      "image": "https://i.ibb.co/05hGbdm/Black-Currant-Pineapple-NOBG.png",
       "name_hu": "Elfbar Lush King Pro 40k",
       "name_en": "Elfbar Lush King Pro 40k",
       "flavor_hu": "Fekete Ribizli Ananász",
@@ -321,7 +321,7 @@
   "popups": [],
   "updatedAt": 1766663310090,
   "_meta": {
-    "rev": 1766773251213,
-    "updatedAt": "2025-12-26T18:20:51.213Z"
+    "rev": 1766773455214,
+    "updatedAt": "2025-12-26T18:24:15.214Z"
   }
 }
