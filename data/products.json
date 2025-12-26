@@ -35,7 +35,7 @@
       "name_en": "Elfbar Ice King 30k",
       "flavor_hu": "Kék Málna",
       "flavor_en": "Blue Razz",
-      "soonEta": ""
+      "soonEta": "2026-01"
     },
     {
       "id": "p_cdf4d9a12f296_19b4e11ef4e",
@@ -97,7 +97,7 @@
   "popups": [],
   "updatedAt": 1766663310090,
   "_meta": {
-    "rev": 1766717816808,
-    "updatedAt": "2025-12-26T02:56:56.808Z"
+    "rev": 1766718573498,
+    "updatedAt": "2025-12-26T03:09:33.498Z"
   }
 }
