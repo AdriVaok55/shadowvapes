@@ -3,14 +3,14 @@
   --panel:#0f1624;
   --card:#121b2c;
   --text:#e8eefc;
-  --muted:#92a0bf;
+  --muted:#dfdfdf;
   --brand:#7c5cff;
   --brand2:#28d7ff;
   --danger:#ff4d6d;
   --ok:#34d399;
   --warning:#ffc107;
   --hot:#ff9800;
-  --shadow: 0 20px 60px rgba(0,0,0,.45);
+  --shadow: 0 20px 60px rgba(0,0,0,.85);
   --radius: 18px;
 }
 
@@ -299,7 +299,7 @@ button, input, select{
 }
 .overlay-title .flavor{
   color: var(--muted);
-  font-size: 13px;
+  font-size: 16px;
 }
 
 .card-body{
