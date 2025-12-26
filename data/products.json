@@ -240,7 +240,7 @@
       "stock": 10,
       "visible": true,
       "price": null,
-      "image": "https://media.discordapp.net/attachments/1281700323081326743/1454166413295222935/Cactus-Lime_NOBG.png?ex=69501982&is=694ec802&hm=963080ec8b8b6bfba3782a50419efb99001e9e3db4d9725f851618c8333ff25d&=&format=webp&quality=lossless&width=856&height=856",
+      "image": "https://i.ibb.co/VcjFbc5R/Cactus-Lime-NOBG.png",
       "name_hu": "Elfbar Lush King Pro 40k",
       "name_en": "Elfbar Lush King Pro 40k",
       "flavor_hu": "Kaktusz Lime",
@@ -321,7 +321,7 @@
   "popups": [],
   "updatedAt": 1766663310090,
   "_meta": {
-    "rev": 1766773537214,
-    "updatedAt": "2025-12-26T18:25:37.214Z"
+    "rev": 1766773586215,
+    "updatedAt": "2025-12-26T18:26:26.215Z"
   }
 }
