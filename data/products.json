@@ -155,12 +155,26 @@
       "flavor_hu": "Barack Jég",
       "flavor_en": "Peach Ice",
       "soonEta": "2026-01"
+    },
+    {
+      "id": "p_91055a9de76e18_19b5b67c25f",
+      "categoryId": "elfraya25",
+      "status": "soon",
+      "stock": 10,
+      "visible": true,
+      "price": null,
+      "image": "https://media.discordapp.net/attachments/1281700323081326743/1454140584318210048/Apple_Peach_NOBG.png?ex=69500173&is=694eaff3&hm=323a93439a534ece9dd839287d78d2df07465e780cab290115d4d0dedba51ff5&=&format=webp&quality=lossless&width=856&height=856",
+      "name_hu": "Elfbar Raya D3 25K",
+      "name_en": "Elfbar Raya D3 25K",
+      "flavor_hu": "Alma Barack",
+      "flavor_en": "Apple Peach",
+      "soonEta": "2026-01"
     }
   ],
   "popups": [],
   "updatedAt": 1766663310090,
   "_meta": {
-    "rev": 1766765036391,
-    "updatedAt": "2025-12-26T16:03:56.391Z"
+    "rev": 1766765134223,
+    "updatedAt": "2025-12-26T16:05:34.223Z"
   }
 }
