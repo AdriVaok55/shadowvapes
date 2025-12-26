@@ -54,7 +54,7 @@
     {
       "id": "p_f93b7eb924ed1_19b4e156422",
       "categoryId": "elf30",
-      "status": "ok",
+      "status": "soon",
       "stock": 8,
       "visible": true,
       "price": null,
@@ -97,7 +97,7 @@
   "popups": [],
   "updatedAt": 1766663310090,
   "_meta": {
-    "rev": 1766713715608,
-    "updatedAt": "2025-12-26T01:48:35.608Z"
+    "rev": 1766713720609,
+    "updatedAt": "2025-12-26T01:48:40.609Z"
   }
 }
