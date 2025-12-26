@@ -714,7 +714,7 @@
     return queue;
   }
 
-  function showPopupsIfNeeded(){
+function showPopupsIfNeeded(){
     const queue = buildPopupQueue();
     if(!queue.length) return;
 
@@ -749,9 +749,9 @@
     document.body.appendChild(bg);
 
     let currentPopup = 0;
-    let currentSlide = 0; // kategória slide index
-    let currentProductSlide = 0; // termék slide index
-    let slides = []; // termék slide-ok
+    let currentSlide = 0;
+    let currentProductSlide = 0;
+    let slides = [];
     let slideInterval = null;
 
     function renderPopup() {
@@ -783,6 +783,7 @@
         // Clear existing slides
         slider.innerHTML = "";
         slides = [];
+        content.innerHTML = ""; // TÖRÖLJÜK A RÉGI CONTENTET
 
         // Create slides for each product
         products.forEach((product, index) => {
@@ -798,7 +799,7 @@
             
             slide.innerHTML = `
                 <div class="popup-product-image">
-                    <img src="${product.image || ''}" alt="${name} ${flavor}" loading="lazy" style="object-fit: contain;max-height:350px;width:100%;">
+                    <img src="${product.image || ''}" alt="${name} ${flavor}" loading="lazy">
                 </div>
                 <div class="popup-product-info">
                     <div class="popup-product-name">${name}</div>
@@ -813,20 +814,16 @@
             slides.push(slide);
         });
 
-        // ✅ Infinite slider setup: only clone the first slide and append to the end (csak jobbról balra)
-        if (slides.length > 1) {
-            const firstClone = slides[0].cloneNode(true);
-            slider.appendChild(firstClone);
-        }
-
         const totalSlides = slides.length;
-        const sliderWidth = totalSlides > 1 ? (totalSlides + 1) * 100 : 100;
+        const sliderWidth = totalSlides * 100;
         slider.style.width = `${sliderWidth}%`;
 
         function goToSlide(index, animate = true) {
             if (totalSlides <= 1) return;
 
             currentProductSlide = index;
+            if (currentProductSlide >= totalSlides) currentProductSlide = 0;
+            if (currentProductSlide < 0) currentProductSlide = totalSlides - 1;
 
             if (animate) {
                 slider.style.transition = 'transform 0.5s ease';
@@ -836,16 +833,6 @@
 
             const offset = -currentProductSlide * 100;
             slider.style.transform = `translateX(${offset}%)`;
-
-            // ✅ Ha elérjük a klónt (utolsó slide), azonnal ugorjunk vissza az elsőre (láthatatlan ugrás)
-            if (currentProductSlide === totalSlides) {
-                setTimeout(() => {
-                    slider.style.transition = 'none';
-                    currentProductSlide = 0;
-                    slider.style.transform = `translateX(0%)`;
-                }, 500);
-            }
-
             updateDots();
         }
 
@@ -856,21 +843,7 @@
 
         function prevSlide() {
             if (slides.length <= 1) return;
-            let newIndex = currentProductSlide - 1;
-            if (newIndex < 0) {
-                // Ha az elsőnél vagyunk és visszamegyünk, ugorjunk az utolsó igazi slide-ra
-                newIndex = totalSlides - 1;
-                // Először ugorjunk a klónra (láthatatlan), majd animálva az utolsóra
-                slider.style.transition = 'none';
-                currentProductSlide = totalSlides;
-                slider.style.transform = `translateX(-${currentProductSlide * 100}%)`;
-                
-                setTimeout(() => {
-                    goToSlide(newIndex, true);
-                }, 50);
-                return;
-            }
-            goToSlide(newIndex, true);
+            goToSlide(currentProductSlide - 1, true);
         }
 
         // Create dots
@@ -881,14 +854,13 @@
             dots.innerHTML = '';
             for(let i = 0; i < totalSlides; i++) {
                 const dot = document.createElement("div");
-                const displayIndex = currentProductSlide >= totalSlides ? 0 : currentProductSlide;
-                dot.className = `popup-dot ${i === displayIndex ? 'active' : ''}`;
+                dot.className = `popup-dot ${i === currentProductSlide ? 'active' : ''}`;
                 dot.addEventListener('click', () => goToSlide(i));
                 dots.appendChild(dot);
             }
         }
 
-        // ✅ Auto slide (csak jobbra)
+        // Auto slide
         if(slideInterval) clearInterval(slideInterval);
         if(totalSlides > 1) {
             slideInterval = setInterval(nextSlide, 4000);
@@ -906,16 +878,11 @@
         dontShow.className = "chk";
         dontShow.innerHTML = `<input type="checkbox" id="dontShowAgain"> ${t("dontShow")}`;
         
-        // ✅ "Skip all" csak akkor, ha több popup van
-        const buttons = document.createElement("div");
-        buttons.className = "popup-buttons";
-        
         if(queue.length > 1) {
             const skipAllBtn = document.createElement("button");
             skipAllBtn.className = "ghost";
             skipAllBtn.textContent = t("skipAll");
             skipAllBtn.onclick = () => {
-                // Hide all popups
                 queue.forEach(q => {
                     try {
                         localStorage.setItem(popupHideKey(q.popup), "1");
@@ -924,7 +891,7 @@
                 if(slideInterval) clearInterval(slideInterval);
                 bg.remove();
             };
-            buttons.appendChild(skipAllBtn);
+            footer.appendChild(skipAllBtn);
         }
         
         const understoodBtn = document.createElement("button");
@@ -941,13 +908,13 @@
             if(slideInterval) clearInterval(slideInterval);
             renderPopup();
         };
-        buttons.appendChild(understoodBtn);
+        footer.appendChild(understoodBtn);
         
-        footer.appendChild(dontShow);
-        if(totalSlides > 1) footer.appendChild(dots);
-        footer.appendChild(buttons);
+        if(totalSlides > 1) {
+            footer.appendChild(dots);
+        }
 
-        // ✅ Navigation arrows (mindkét irányba)
+        // Navigation arrows
         if(totalSlides > 1) {
             const prevArrow = document.createElement("button");
             prevArrow.className = "popup-arrow prev";
@@ -963,15 +930,14 @@
             content.appendChild(nextArrow);
         }
 
-        content.innerHTML = '';
         content.appendChild(slider);
-        if(totalSlides > 1) updateDots();
+        updateDots();
         goToSlide(0, false);
     }
 
     renderPopup();
 
-    // ✅ Swipe support for mobile (mindkét irány)
+    // Swipe support
     let touchStartX = 0;
     let touchEndX = 0;
 
@@ -981,23 +947,16 @@
 
     content.addEventListener('touchend', (e) => {
         touchEndX = e.changedTouches[0].screenX;
-        handleSwipe();
-    });
-
-    function handleSwipe() {
-        const swipeThreshold = 50;
         const diff = touchStartX - touchEndX;
-
-        if(Math.abs(diff) > swipeThreshold) {
+        
+        if(Math.abs(diff) > 50) {
             if(diff > 0) {
-                // Swipe left - next
                 nextSlide();
             } else {
-                // Swipe right - previous
                 prevSlide();
             }
         }
-    }
+    });
 
     // Close on background click
     bg.addEventListener("click", (e) => {
@@ -1006,7 +965,7 @@
             bg.remove();
         }
     });
-  }
+}
 
   /* ----------------- Init ----------------- */
   function setLangUI(){
