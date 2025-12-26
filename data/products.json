@@ -291,12 +291,12 @@
     },
     {
       "id": "p_6db677a6c8739_19b5bd13894",
-      "categoryId": "elf30",
+      "categoryId": "elflush40",
       "status": "soon",
       "stock": 5,
       "visible": true,
       "price": null,
-      "image": "https://media.discordapp.net/attachments/1281700323081326743/1454166412384796795/Black-Grape-Ice_NOBG.png?ex=69501981&is=694ec801&hm=e8f73470cd1acc7136319114b89c547d225078395fa06144d2608d33f07d951a&=&format=webp&quality=lossless&width=856&height=856",
+      "image": "https://media.discordapp.net/attachments/1281700323081326743/1454172801543180308/Black-Grape-Ice_NOBG.png?ex=69501f75&is=694ecdf5&hm=90716dd9bc05f1316ebfff38d5c440f9f7ee65066e314c7318a8d3c47a1df913&=&format=webp&quality=lossless&width=960&height=960",
       "name_hu": "Elfbar Lush King Pro 40k",
       "name_en": "Elfbar Lush King Pro 40k",
       "flavor_hu": "Fekete Szőlő Jég",
@@ -307,7 +307,7 @@
   "popups": [],
   "updatedAt": 1766663310090,
   "_meta": {
-    "rev": 1766772107213,
-    "updatedAt": "2025-12-26T18:01:47.213Z"
+    "rev": 1766772268215,
+    "updatedAt": "2025-12-26T18:04:28.215Z"
   }
 }
