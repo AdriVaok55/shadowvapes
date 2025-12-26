@@ -310,7 +310,7 @@
       "stock": 10,
       "visible": true,
       "price": null,
-      "image": "https://media.discordapp.net/attachments/1281700323081326743/1454166412938711132/Blue-Razz-Ice_NOBG.png?ex=69501981&is=694ec801&hm=0f849596ef0bea92a9a3a6ff27e3ddf736214a3ae46d91da3ea2bd04b4cee8c5&=&format=webp&quality=lossless&width=856&height=856",
+      "image": "https://i.ibb.co/4gWwgfdw/Blue-Razz-Ice-NOBG.png",
       "name_hu": "Elfbar Lush King Pro 40k",
       "name_en": "Elfbar Lush King Pro 40k",
       "flavor_hu": "Kék Málna Jég",
@@ -321,7 +321,7 @@
   "popups": [],
   "updatedAt": 1766663310090,
   "_meta": {
-    "rev": 1766773512214,
-    "updatedAt": "2025-12-26T18:25:12.214Z"
+    "rev": 1766773537214,
+    "updatedAt": "2025-12-26T18:25:37.214Z"
   }
 }
