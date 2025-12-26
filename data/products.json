@@ -102,7 +102,7 @@
     },
     {
       "id": "p_ffc645ec0ef398_19b5b5ed5eb",
-      "categoryId": "elf30",
+      "categoryId": "elfraya25",
       "status": "soon",
       "stock": 10,
       "visible": true,
@@ -118,7 +118,7 @@
   "popups": [],
   "updatedAt": 1766663310090,
   "_meta": {
-    "rev": 1766764695021,
-    "updatedAt": "2025-12-26T15:58:15.021Z"
+    "rev": 1766764709566,
+    "updatedAt": "2025-12-26T15:58:29.566Z"
   }
 }
