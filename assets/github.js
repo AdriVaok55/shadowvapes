@@ -1,6 +1,11 @@
 (() => {
   const API = "https://api.github.com";
 
+  // cache: gyorsabb mentés + sha hiány hiba elkerülése
+  const shaCache = new Map();
+  const cacheKey = ({ owner, repo, branch, path }) =>
+    `${owner}/${repo}@${branch}:${String(path || "")}`;
+
   function encodePath(path){
     return String(path || "")
       .split("/")
@@ -14,21 +19,21 @@
     for (const b of bytes) bin += String.fromCharCode(b);
     return btoa(bin);
   }
-  
+
   function fromBase64Unicode(b64){
-    const bin = atob((b64 || "").replace(/\n/g,""));
-    const bytes = Uint8Array.from(bin, c => c.charCodeAt(0));
+    if(!b64) return "";
+    const bin = atob(b64);
+    const bytes = new Uint8Array([...bin].map(ch => ch.charCodeAt(0)));
     return new TextDecoder().decode(bytes);
   }
 
   async function ghRequest(token, method, url, body){
     const headers = {
       "Accept": "application/vnd.github+json",
-      "Content-Type": "application/json",
-      "X-GitHub-Api-Version": "2022-11-28",
-      "Authorization": `token ${token}`
+      "Content-Type": "application/json"
     };
-    
+    if(token) headers["Authorization"] = `token ${token}`;
+
     const res = await fetch(url, {
       method,
       headers,
@@ -55,22 +60,45 @@
     const url = `${API}/repos/${owner}/${repo}/contents/${encodePath(path)}?ref=${encodeURIComponent(branch)}`;
     const data = await ghRequest(token, "GET", url);
     const content = fromBase64Unicode(data.content || "");
-    return { sha: data.sha, content };
+    const sha = data.sha || null;
+    try{
+      shaCache.set(cacheKey({owner, repo, branch, path}), sha);
+    }catch{}
+    return { sha, content };
   }
 
   async function putFile({token, owner, repo, path, branch, message, content, sha}){
     const url = `${API}/repos/${owner}/${repo}/contents/${encodePath(path)}`;
     const body = {
-      message,
-      branch,
-      content: toBase64Unicode(content),
+      message: message || `Update ${path}`,
+      content: toBase64Unicode(content || ""),
+      branch
     };
     if(sha) body.sha = sha;
-    return await ghRequest(token, "PUT", url, body);
+
+    const res = await ghRequest(token, "PUT", url, body);
+
+    // update cache
+    const newSha = res?.content?.sha || null;
+    if(newSha){
+      try{
+        shaCache.set(cacheKey({owner, repo, branch, path}), newSha);
+      }catch{}
+    }
+    return res;
   }
 
   async function putFileSafe({token, owner, repo, path, branch, message, content, sha, retries=3}){
-    let curSha = sha;
+    let curSha = sha || null;
+
+    // ha nem adtak sha-t, próbáljuk cache-ből (gyors)
+    if(!curSha){
+      try{
+        const cached = shaCache.get(cacheKey({owner, repo, branch, path}));
+        if(cached) curSha = cached;
+      }catch{}
+    }
+
     let lastErr = null;
 
     for(let i=0;i<=retries;i++){
@@ -81,15 +109,23 @@
         const msg = String(e?.message || "");
         const status = Number(e?.status || 0);
 
-        const retryable = status === 409 || msg.includes("does not match") || msg.includes("expected");
+        const shaMissing = status === 422 && /sha/i.test(msg);
+        const retryable = shaMissing || status === 409 || msg.includes("does not match") || msg.includes("expected");
 
         if(i < retries && retryable){
           await new Promise(r => setTimeout(r, 200 + Math.random()*200));
+
+          // sha hiány / konflikt: kérjük le a legfrissebbet és próbáljuk újra
           try{
             const latest = await getFile({token, owner, repo, path, branch});
-            curSha = latest.sha;
+            curSha = latest.sha || null;
             continue;
-          }catch{
+          }catch(fetchErr){
+            // ha nem létezik, próbáljuk létrehozni sha nélkül
+            if(Number(fetchErr?.status || 0) === 404){
+              curSha = null;
+              continue;
+            }
             throw e;
           }
         }
