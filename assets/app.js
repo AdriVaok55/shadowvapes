@@ -33,9 +33,9 @@
     expected: { hu: "Várható", en: "Expected" }
   };
 
-  const t = (k) => (UI[k] ? UI[k][state.lang] : k);
+  const t = (k) => (UI[k] ? UI[k].hu : k);
 
-  const locale = () => (state.lang === "en" ? "en" : "hu");
+  const locale = () => "hu";
 
   const norm = (s) =>
     (s || "")
@@ -45,7 +45,7 @@
       .replace(/[\u0300-\u036f]/g, "");
 
   function catLabel(c) {
-    return (c && (state.lang === "en" ? (c.label_en || c.label_hu || c.id) : (c.label_hu || c.label_en || c.id))) || "";
+    return (c && (c.label_hu || c.label_en || c.id)) || "";
   }
 
   function getName(p) {
@@ -58,25 +58,22 @@
       : (p.flavor_hu || p.flavor_en || p.flavor || "");
   }
 
-  // ✅ Csak hónap formátum kezelése: YYYY-MM -> "2025. December"
+  // ✅ Csak hónap: YYYY-MM -> "December" (évszám nélkül)
   function formatMonth(monthStr) {
     if (!monthStr) return "";
     try {
-      const [year, month] = monthStr.split("-");
-      if (!year || !month) return monthStr;
-      
+      const [, month] = String(monthStr).split("-");
+      if (!month) return String(monthStr);
+
       const monthNum = parseInt(month, 10);
-      if (isNaN(monthNum) || monthNum < 1 || monthNum > 12) return monthStr;
-      
-      const monthNames = state.lang === "en" 
-        ? ["January", "February", "March", "April", "May", "June", 
-           "July", "August", "September", "October", "November", "December"]
-        : ["Január", "Február", "Március", "Április", "Május", "Június",
-           "Július", "Augusztus", "Szeptember", "Október", "November", "December"];
-      
-      return `${year}. ${monthNames[monthNum - 1]}`;
+      if (isNaN(monthNum) || monthNum < 1 || monthNum > 12) return String(monthStr);
+
+      const monthNamesHU = ["Január", "Február", "Március", "Április", "Május", "Június",
+        "Július", "Augusztus", "Szeptember", "Október", "November", "December"];
+
+      return monthNamesHU[monthNum - 1];
     } catch {
-      return monthStr;
+      return String(monthStr);
     }
   }
 
@@ -570,6 +567,9 @@
       // sold-out legyen szürke (CSS is)
       if (out) {
         img.style.filter = "grayscale(.75) contrast(.95) brightness(.85)";
+      } else if (soon) {
+        // hamarosan: kicsit szürkébb, de ne annyira mint az elfogyott
+        img.style.filter = "grayscale(.25) contrast(.98) brightness(.92)";
       }
 
       const badges = document.createElement("div");
@@ -591,7 +591,7 @@
         // Add expected month badge if available
         if (p.soonEta) {
           const expectedBadge = document.createElement("div");
-          expectedBadge.className = "badge calendar";
+          expectedBadge.className = "badge soon";
           expectedBadge.textContent = `📅 ${t("expected")}: ${formatMonth(p.soonEta)}`;
           badges.appendChild(expectedBadge);
         }
@@ -789,10 +789,13 @@
             const stock = product.stock;
             const isProductSoon = isSoon(product);
             const isProductOut = isOut(product);
+            const imgFilter = isProductOut
+              ? "grayscale(.75) contrast(.95) brightness(.85)"
+              : (isProductSoon ? "grayscale(.25) contrast(.98) brightness(.92)" : "none");
             
             slide.innerHTML = `
                 <div class="popup-product-image">
-                    <img src="${product.image || ''}" alt="${name} ${flavor}" loading="lazy" style="object-fit: contain;max-height:350px;width:100%;">
+                    <img src="${product.image || ''}" alt="${name} ${flavor}" loading="lazy" style="object-fit: contain;max-height:350px;width:100%;filter:${imgFilter};">
                 </div>
                 <div class="popup-product-info">
                     <div class="popup-product-name">${name}</div>
@@ -814,8 +817,9 @@
         }
 
         const totalSlides = slides.length;
-        const sliderWidth = totalSlides > 1 ? (totalSlides + 1) * 100 : 100;
-        slider.style.width = `${sliderWidth}%`;
+
+        // 🔧 Fontos: a slider szélessége maradjon 100% (különben "szétcsúszik" / belenagyít)
+        slider.style.width = "100%";
 
         function goToSlide(index, animate = true) {
             if (totalSlides <= 1) return;
@@ -890,7 +894,7 @@
 
         // Update header and footer
         header.innerHTML = `
-            <div class="popup-title">${state.lang === "en" ? (popup.title_en || t("newAvail")) : (popup.title_hu || t("newAvail"))}</div>
+            <div class="popup-title">${popup.title_hu || t("newAvail")}</div>
             <div class="popup-subtitle">${category.label}</div>
         `;
 
@@ -1005,7 +1009,7 @@
   /* ----------------- Init ----------------- */
   function setLangUI(){
     $("#langLabel").textContent = state.lang.toUpperCase();
-    $("#search").placeholder = state.lang === "en" ? "Search..." : "Keresés...";
+    $("#search").placeholder = "Keresés...";
   }
 
   function initLang(){
