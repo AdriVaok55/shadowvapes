@@ -13,7 +13,7 @@
       "id": "p_568389f50aa19_19b4d718932",
       "categoryId": "elf30",
       "status": "ok",
-      "stock": 3,
+      "stock": 8,
       "visible": true,
       "price": null,
       "image": "https://media.discordapp.net/attachments/1281700323081326743/1453178739029704795/Grape_ice_bg_removed_correct.png?ex=694dd32a&is=694c81aa&hm=8513a136fbb57f1de475ab544995ac650409c8df51df52cd2dcdca5ed1e1c8da&=&format=webp&quality=lossless&width=960&height=960",
@@ -40,8 +40,8 @@
     {
       "id": "p_cdf4d9a12f296_19b4e11ef4e",
       "categoryId": "elf30",
-      "status": "out",
-      "stock": 0,
+      "status": "ok",
+      "stock": 6,
       "visible": true,
       "price": null,
       "image": "https://media.discordapp.net/attachments/1281700323081326743/1453190144839516222/Pink_lemonade_no_bg.png?ex=694dddc9&is=694c8c49&hm=a6a1e217359b70b00d883cee2189828a2ebbdd2688d25005e2c74edcb05ed6be&=&format=webp&quality=lossless&width=856&height=856",
@@ -126,7 +126,7 @@
   ],
   "updatedAt": 1766663310090,
   "_meta": {
-    "rev": 1766712362848,
-    "updatedAt": "2025-12-26T01:26:02.848Z"
+    "rev": 1766713582556,
+    "updatedAt": "2025-12-26T01:46:22.556Z"
   }
 }
