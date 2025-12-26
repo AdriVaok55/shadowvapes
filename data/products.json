@@ -296,7 +296,7 @@
       "stock": 5,
       "visible": true,
       "price": null,
-      "image": "https://media.discordapp.net/attachments/1281700323081326743/1454172801543180308/Black-Grape-Ice_NOBG.png?ex=69501f75&is=694ecdf5&hm=90716dd9bc05f1316ebfff38d5c440f9f7ee65066e314c7318a8d3c47a1df913&=&format=webp&quality=lossless&width=960&height=960",
+      "image": "https://i.ibb.co/xKKF4T7T/Black-Grape-Ice-NOBG.png",
       "name_hu": "Elfbar Lush King Pro 40k",
       "name_en": "Elfbar Lush King Pro 40k",
       "flavor_hu": "Fekete Szőlő Jég",
@@ -321,7 +321,7 @@
   "popups": [],
   "updatedAt": 1766663310090,
   "_meta": {
-    "rev": 1766773455214,
-    "updatedAt": "2025-12-26T18:24:15.214Z"
+    "rev": 1766773512214,
+    "updatedAt": "2025-12-26T18:25:12.214Z"
   }
 }
