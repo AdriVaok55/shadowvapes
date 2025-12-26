@@ -282,7 +282,7 @@
       "stock": 5,
       "visible": true,
       "price": null,
-      "image": "https://media.discordapp.net/attachments/1281700323081326743/1454166411499933716/Sour-Pineapple-Ice_NOBG.png?ex=69501981&is=694ec801&hm=7a3602fa6b477fd2ca5c134877af82c66aa4ed655d40c937c951b22aa662e51f&=&format=webp&quality=lossless&width=856&height=856",
+      "image": "https://i.ibb.co/spKKRGgp/Sour-Pineapple-Ice-NOBG.png",
       "name_hu": "Elfbar Lush King Pro 40k",
       "name_en": "Elfbar Lush King Pro 40k",
       "flavor_hu": "Savanyú Ananász Jég",
@@ -321,7 +321,7 @@
   "popups": [],
   "updatedAt": 1766663310090,
   "_meta": {
-    "rev": 1766773705214,
-    "updatedAt": "2025-12-26T18:28:25.214Z"
+    "rev": 1766773734214,
+    "updatedAt": "2025-12-26T18:28:54.214Z"
   }
 }
