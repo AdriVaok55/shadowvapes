@@ -912,22 +912,15 @@
             const skipAllBtn = document.createElement("button");
             skipAllBtn.className = "ghost";
             skipAllBtn.textContent = t("skipAll");
-           skipAllBtn.onclick = () => {
-  const checkbox = document.getElementById("dontShowAgain");
-  const persist = !!(checkbox && checkbox.checked);
-
-  if (persist) {
-    queue.forEach(q => {
-      try {
-        localStorage.setItem(popupHideKey(q.popup), "1");
-      } catch {}
-    });
-  }
-
-  if (slideInterval) clearInterval(slideInterval);
-  bg.remove();
-};
-
+            skipAllBtn.onclick = () => {
+                // Hide all popups
+                queue.forEach(q => {
+                    try {
+                        localStorage.setItem(popupHideKey(q.popup), "1");
+                    } catch {}
+                });
+                if(slideInterval) clearInterval(slideInterval);
+                bg.remove();
             };
             buttons.appendChild(skipAllBtn);
         }
