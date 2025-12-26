@@ -783,7 +783,6 @@ function showPopupsIfNeeded(){
         // Clear existing slides
         slider.innerHTML = "";
         slides = [];
-        content.innerHTML = ""; // TÖRÖLJÜK A RÉGI CONTENTET
 
         // Create slides for each product
         products.forEach((product, index) => {
@@ -813,6 +812,9 @@ function showPopupsIfNeeded(){
             slider.appendChild(slide);
             slides.push(slide);
         });
+
+        content.innerHTML = "";
+        content.appendChild(slider);
 
         const totalSlides = slides.length;
         const sliderWidth = totalSlides * 100;
@@ -874,9 +876,12 @@ function showPopupsIfNeeded(){
 
         footer.innerHTML = '';
         
-        const dontShow = document.createElement("label");
-        dontShow.className = "chk";
-        dontShow.innerHTML = `<input type="checkbox" id="dontShowAgain"> ${t("dontShow")}`;
+        if(totalSlides > 1) {
+            footer.appendChild(dots);
+        }
+        
+        const buttonsContainer = document.createElement("div");
+        buttonsContainer.className = "popup-buttons";
         
         if(queue.length > 1) {
             const skipAllBtn = document.createElement("button");
@@ -891,8 +896,13 @@ function showPopupsIfNeeded(){
                 if(slideInterval) clearInterval(slideInterval);
                 bg.remove();
             };
-            footer.appendChild(skipAllBtn);
+            buttonsContainer.appendChild(skipAllBtn);
         }
+        
+        const dontShow = document.createElement("label");
+        dontShow.className = "chk";
+        dontShow.innerHTML = `<input type="checkbox" id="dontShowAgain"> ${t("dontShow")}`;
+        buttonsContainer.appendChild(dontShow);
         
         const understoodBtn = document.createElement("button");
         understoodBtn.className = "primary";
@@ -908,11 +918,9 @@ function showPopupsIfNeeded(){
             if(slideInterval) clearInterval(slideInterval);
             renderPopup();
         };
-        footer.appendChild(understoodBtn);
+        buttonsContainer.appendChild(understoodBtn);
         
-        if(totalSlides > 1) {
-            footer.appendChild(dots);
-        }
+        footer.appendChild(buttonsContainer);
 
         // Navigation arrows
         if(totalSlides > 1) {
@@ -930,7 +938,6 @@ function showPopupsIfNeeded(){
             content.appendChild(nextArrow);
         }
 
-        content.appendChild(slider);
         updateDots();
         goToSlide(0, false);
     }
