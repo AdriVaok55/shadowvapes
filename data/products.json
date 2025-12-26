@@ -212,7 +212,7 @@
       "stock": 5,
       "visible": true,
       "price": null,
-      "image": "https://media.discordapp.net/attachments/1281700323081326743/1454166414721286245/Milky-Oolong_NOBG.png?ex=69501982&is=694ec802&hm=cfa6d1a20165df83c98fef4792162af61a83514ddd6e4f8d176730a581190a33&=&format=webp&quality=lossless&width=856&height=856",
+      "image": "https://i.ibb.co/Kxr94bD6/Milky-Oolong-NOBG.png",
       "name_hu": "Elfbar Lush King Pro 40k",
       "name_en": "Elfbar Lush King Pro 40k",
       "flavor_hu": "Tejes Oolong Tea",
@@ -321,7 +321,7 @@
   "popups": [],
   "updatedAt": 1766663310090,
   "_meta": {
-    "rev": 1766773647213,
-    "updatedAt": "2025-12-26T18:27:27.213Z"
+    "rev": 1766773676214,
+    "updatedAt": "2025-12-26T18:27:56.214Z"
   }
 }
