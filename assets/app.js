@@ -318,7 +318,7 @@
         }else if(qty === bestQty && bestPid){
           // tie-break: íz név abc szerint (HU/EN locale)
           const a = products.find(x=>String(x.id)===pid);
-          const b = products.find(x=>String(x.id)===bestPid);
+          const b = products.find(x=>String(x.id)===String(bestPid));
           const fa = norm(getFlavor(a));
           const fb = norm(getFlavor(b));
           const cmp = fa.localeCompare(fb, locale());
@@ -329,7 +329,6 @@
       if(bestPid) state.featuredByCat.set(cid, bestPid);
     }
   }
-
 
   /* ----------------- Change detection (avoid flicker + stale overwrites) ----------------- */
   function hashStr(str){
@@ -432,18 +431,24 @@
 
     if (state.active === "soon") {
       list = list.filter((p) => p.status === "soon");
+    } else if (state.active !== "all") {
+      list = list.filter((p) => String(p.categoryId) === String(state.active));
+      list = list.filter((p) => p.status !== "soon");
     } else {
-      if (state.active !== "all") list = list.filter((p) => String(p.categoryId) === String(state.active));
+      list = list.filter((p) => p.status !== "soon");
     }
 
     if (q) {
-      list = list.filter((p) => norm(getName(p) + " " + getFlavor(p)).includes(q));
+      list = list.filter((p) => {
+        const name = norm(getName(p));
+        const fl = norm(getFlavor(p));
+        return name.includes(q) || fl.includes(q);
+      });
     }
 
-    // ✅ order: ok ... then soon ... then out
-    const okPart = list.filter((p) => !isOut(p) && !isSoon(p));
-    const soonPart = list.filter((p) => !isOut(p) && isSoon(p));
-    const outPart = list.filter((p) => isOut(p));
+    // ordering: ok → soon (handled separately) → out at end, and group by same name side-by-side
+    const okPart = list.filter(p => !isOut(p) && !isSoon(p));
+    const outPart = list.filter(p => isOut(p));
 
     const groupSort = (arr) => {
       const map = new Map();
@@ -462,7 +467,7 @@
       return out;
     };
 
-    return [...groupSort(okPart), ...groupSort(soonPart), ...groupSort(outPart)];
+    return [...groupSort(okPart), ...groupSort(outPart)];
   }
 
   function fmtFt(n) {
@@ -543,9 +548,14 @@
       const flavor = getFlavor(p);
       const out = isOut(p);
       const soon = isSoon(p);
-      const featured = featuredIds.has(String(p.id));
-      const stockShown = out ? 0 : (soon ? Math.max(0, Number(p.stock || 0)) : Math.max(0, Number(p.stock || 0)));
       const price = effectivePrice(p);
+      const stockShown = soon ? "—" : Math.max(0, Number(p.stock || 0));
+
+      const featured = (state.active !== "soon")
+        ? (state.active === "all"
+          ? (getFeaturedListForAll().some(x => String(x.id) === String(p.id)))
+          : (String(state.featuredByCat.get(String(state.active))||"") === String(p.id)))
+        : false;
 
       // Determine card classes based on status
       let cardClass = "card fade-in";
@@ -748,6 +758,10 @@
     let slides = []; // termék slide-ok
     let slideInterval = null;
 
+    // swipe helpers (renderPopup-ban kapnak értelmet)
+    let swipeNext = () => {};
+    let swipePrev = () => {};
+
     function renderPopup() {
         if (currentPopup >= queue.length) {
             bg.remove();
@@ -871,6 +885,11 @@
             goToSlide(newIndex, true);
         }
 
+        // ✅ Mobil swipe ehhez a két funkcióhoz kötődik
+        swipeNext = nextSlide;
+        swipePrev = prevSlide;
+
+
         // Create dots
         const dots = document.createElement("div");
         dots.className = "popup-dots";
@@ -913,12 +932,19 @@
             skipAllBtn.className = "ghost";
             skipAllBtn.textContent = t("skipAll");
             skipAllBtn.onclick = () => {
-                // Hide all popups
-                queue.forEach(q => {
-                    try {
-                        localStorage.setItem(popupHideKey(q.popup), "1");
-                    } catch {}
-                });
+                // ✅ Ha nincs bepipálva a "Ne mutasd többször", akkor csak MOST zárjuk be (refresh után újra jöhet)
+                const checkbox = document.getElementById("dontShowAgain");
+                const persist = !!(checkbox && checkbox.checked);
+
+                if(persist){
+                    // Hide all popups (tartós)
+                    queue.forEach(q => {
+                        try {
+                            localStorage.setItem(popupHideKey(q.popup), "1");
+                        } catch {}
+                    });
+                }
+
                 if(slideInterval) clearInterval(slideInterval);
                 bg.remove();
             };
@@ -942,10 +968,9 @@
         buttons.appendChild(understoodBtn);
         
         footer.appendChild(dontShow);
-        if(totalSlides > 1) footer.appendChild(dots);
         footer.appendChild(buttons);
 
-        // ✅ Navigation arrows (mindkét irányba)
+        // Add navigation arrows if multiple slides
         if(totalSlides > 1) {
             const prevArrow = document.createElement("button");
             prevArrow.className = "popup-arrow prev";
@@ -971,34 +996,46 @@
 
     // ✅ Swipe support for mobile (mindkét irány)
     let touchStartX = 0;
+    let touchStartY = 0;
     let touchEndX = 0;
+    let touchEndY = 0;
 
     content.addEventListener('touchstart', (e) => {
-        touchStartX = e.changedTouches[0].screenX;
-    });
+        const t0 = (e.touches && e.touches[0]) ? e.touches[0] : (e.changedTouches && e.changedTouches[0]);
+        if(!t0) return;
+        touchStartX = t0.screenX;
+        touchStartY = t0.screenY;
+    }, { passive: true });
 
     content.addEventListener('touchend', (e) => {
-        touchEndX = e.changedTouches[0].screenX;
+        const t0 = (e.changedTouches && e.changedTouches[0]) ? e.changedTouches[0] : (e.touches && e.touches[0]);
+        if(!t0) return;
+        touchEndX = t0.screenX;
+        touchEndY = t0.screenY;
         handleSwipe();
-    });
+    }, { passive: true });
 
     function handleSwipe() {
         const swipeThreshold = 50;
-        const diff = touchStartX - touchEndX;
+        const diffX = touchStartX - touchEndX;
+        const diffY = touchStartY - touchEndY;
 
-        if(Math.abs(diff) > swipeThreshold) {
-            if(diff > 0) {
+        // ha inkább vertikális mozdulat, ne lapozzon
+        if(Math.abs(diffY) > Math.abs(diffX)) return;
+
+        if(Math.abs(diffX) > swipeThreshold) {
+            if(diffX > 0) {
                 // Swipe left - next
-                nextSlide();
+                try{ swipeNext(); }catch{}
             } else {
                 // Swipe right - previous
-                prevSlide();
+                try{ swipePrev(); }catch{}
             }
         }
     }
 
     // Close on background click
-    bg.addEventListener("click", (e) => {
+    bg.addEventListener('click', (e) => {
         if(e.target === bg) {
             if(slideInterval) clearInterval(slideInterval);
             bg.remove();
@@ -1105,48 +1142,32 @@
       bc.onmessage = (e) => {
         try{
           if(!e.data) return;
+          const payload = e.data;
 
-          let changed = false;
-          if(e.data.doc){
-            changed = applyDocIfNewer(e.data.doc, { source:"live" }) || changed;
-          }
-          if("sales" in e.data){
-            // admin mentés után ez friss
-            changed = applySalesIfChanged(normalizeSales(e.data.sales || []), { fresh:true }) || changed;
-          }
-          if(changed){
+          // apply only if fresh
+          const ts = Number(payload.ts || 0) || 0;
+          if(!ts || (Date.now() - ts) > 120_000) return;
+
+          const docChanged = applyDocIfNewer(payload.doc, { source: "live" });
+          const salesChanged = applySalesIfChanged(normalizeSales(payload.sales || []), { fresh:true });
+
+          if(docChanged || salesChanged){
             computeFeaturedByCategory();
             renderNav();
             renderGrid();
-            setTimeout(() => showPopupsIfNeeded(), 100);
+            // popups may change too
+            showPopupsIfNeeded();
           }
         }catch{}
       };
     }catch{}
 
-    // polling (light) - increased interval for mobile
-    const loop = async () => {
-      try{
-        const changed = await loadAll({ forceBust:false });
-        if(changed){
-          renderNav();
-          renderGrid();
-          setTimeout(() => showPopupsIfNeeded(), 100);
-        }
-      }catch{}
-      setTimeout(loop, 30_000);
-    };
-
-    document.addEventListener("visibilitychange", () => {
-      if (!document.hidden) loadAll({ forceBust:true }).then((changed)=>{ if(changed){ renderNav(); renderGrid(); } setTimeout(() => showPopupsIfNeeded(), 100); }).catch(()=>{});
+    // search
+    $("#search").addEventListener("input", () => {
+      state.search = $("#search").value || "";
+      renderGrid();
     });
-
-    loop();
   }
 
-  init().catch((err) => {
-    console.error(err);
-    $("#loaderText").textContent =
-      "Betöltési hiba. (Nyisd meg a konzolt.) Ha telefonon vagy ...vagy: nyisd meg egyszer a Sync linket az admin Beállításokból.";
-  });
+  init();
 })();
