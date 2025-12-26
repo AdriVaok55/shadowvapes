@@ -3,56 +3,54 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <meta name="theme-color" content="#0b0f17" />
   <title>ShadowVapes</title>
-  <link rel="stylesheet" href="assets/styles.css?v=sv_fix11_20251225" />
+  <link rel="stylesheet" href="assets/styles.css" />
 </head>
 <body>
   <div id="loader">
     <div class="loader-card">
       <div class="loader-top">
-        <div class="loader-logo">ShadowVapes</div>
+        <div class="loader-logo">Shadow<span style="background:linear-gradient(90deg,var(--brand),var(--brand2));-webkit-background-clip:text;background-clip:text;color:transparent;">Vapes</span></div>
         <div class="pulse"></div>
       </div>
-      <div class="loader-bar"><div class="loader-fill"></div></div>
-      <div class="loader-note">Betöltés…</div>
+      <div class="loader-bar"><div></div></div>
+      <div class="loader-sub" id="loaderText">Betöltés...</div>
     </div>
   </div>
 
-  <div class="wrap">
+  <div class="wrap" style="display:none" id="app">
     <aside class="sidebar">
-      <div class="brand">
-        <div class="logo">SV</div>
-        <div class="title">ShadowVapes</div>
-      </div>
+      <div class="brand">Shadow<span>Vapes</span></div>
 
-      <div class="search">
-        <input id="search" placeholder="Keresés..." />
-        <button id="langBtn" class="lang">
-          <span id="langLabel">HU</span>
-        </button>
-      </div>
+      <div class="nav" id="nav"></div>
 
-      <div id="catNav" class="nav"></div>
-
-      <div class="foot">
-        <div class="small">© ShadowVapes</div>
+      <div class="sidebar-bottom">
+        <div class="pill">
+          <span>Nyelv:</span>
+          <b id="langLabel">HU</b>
+          <button id="langBtn">Váltás</button>
+        </div>
+        <div class="pill">
+          <span>Találat:</span>
+          <b id="count">0</b>
+        </div>
       </div>
     </aside>
 
     <main class="main">
-      <div class="topline">
-        <div>
-          <div id="pageTitle" class="h1">Összes termék</div>
-          <div id="pageSubtitle" class="sub">Válassz ízt és nézd a készletet.</div>
-        </div>
+      <div class="topbar">
+        <div class="h1" id="title">Összes termék</div>
+        <input id="search" placeholder="Keresés..." style="width:min(420px,100%);border-radius:14px;border:1px solid rgba(255,255,255,.08);background:rgba(11,15,23,.35);color:var(--text);padding:10px 12px;outline:none;">
       </div>
 
-      <div id="grid" class="grid"></div>
-      <div id="empty" class="empty" style="display:none;">Nincs találat.</div>
+      <div class="grid" id="grid"></div>
+
+      <div class="small-muted" id="empty" style="display:none;margin-top:12px;">
+        Nincs találat.
+      </div>
     </main>
   </div>
 
-  <script src="assets/app.js?v=sv_fix12_20251226"></script>
+  <script src="assets/app.js?v=sv_fix11_20251225"></script>
 </body>
 </html>
