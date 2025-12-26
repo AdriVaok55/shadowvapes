@@ -169,12 +169,26 @@
       "flavor_hu": "Alma Barack",
       "flavor_en": "Apple Peach",
       "soonEta": "2026-01"
+    },
+    {
+      "id": "p_d44a935527ac98_19b5b68e535",
+      "categoryId": "elfraya25",
+      "status": "soon",
+      "stock": 10,
+      "visible": true,
+      "price": null,
+      "image": "https://media.discordapp.net/attachments/1281700323081326743/1454148858534690816/2_bue_razz_ice.png?ex=69500928&is=694eb7a8&hm=7d92c318a3e8535a07b16b8c0619dfd026742d1feebb77b2768847e6d6896a07&=&format=webp&quality=lossless&width=350&height=350",
+      "name_hu": "Elfbar Raya D3 25K",
+      "name_en": "Elfbar Raya D3 25K",
+      "flavor_hu": "Kék Málna Jég",
+      "flavor_en": "Blue Razz Ice",
+      "soonEta": "2026-01"
     }
   ],
   "popups": [],
   "updatedAt": 1766663310090,
   "_meta": {
-    "rev": 1766765134223,
-    "updatedAt": "2025-12-26T16:05:34.223Z"
+    "rev": 1766766535214,
+    "updatedAt": "2025-12-26T16:28:55.214Z"
   }
 }
